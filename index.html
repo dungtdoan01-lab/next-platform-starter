@@ -1,0 +1,3068 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiểm soát Sản xuất MRO - Quản lý Tồn kho</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <style>
+        @import url('https://rsms.me/inter/inter.css');
+        html { font-family: 'Inter', sans-serif; scroll-behavior: smooth; }
+        body { background-color: #f8fafc; /* Slate 50 */ }
+        .chart-container { position: relative; width: 100%; height: 350px; }
+        .chart-container-large { position: relative; width: 100%; height: 450px; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        .sidebar-link.active { background-color: #eef2ff; color: #4338ca; font-weight: 600; }
+        .sidebar-link:hover:not(.active) { background-color: #f4f4f5; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 40; display: flex; align-items: center; justify-content: center; }
+        .modal-content { z-index: 50; }
+        /* Ensure confirmation modal appears on top of other modals */
+        #confirmation-modal.modal-backdrop { z-index: 60; }
+        #confirmation-modal .modal-content { z-index: 70; }
+        .toast-notification { position: fixed; top: 20px; right: 20px; z-index: 100; animation: slideIn 0.5s ease-in-out, fadeOut 0.5s ease-in-out 3.5s forwards; }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .loader { border: 4px solid #f3f3f3; border-radius: 50%; border-top: 4px solid #4f46e5; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .sortable-header { cursor: pointer; user-select: none; }
+        .sortable-header:hover { background-color: #f9fafb; }
+        .sort-icon { display: inline-block; width: 1em; height: 1em; margin-left: 4px; opacity: 0.4; color: #6b7280; }
+        .sortable-header.sort-asc .sort-icon,
+        .sortable-header.sort-desc .sort-icon { opacity: 1; color: #111827; }
+        
+        /* New Button Styles */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem; /* 8px */
+            font-weight: 600;
+            font-size: 0.875rem; /* 14px */
+            border: 1px solid transparent;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        .btn:focus {
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4); /* ring-indigo-300 */
+        }
+        .btn-primary {
+            background-color: #4f46e5; /* indigo-600 */
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca; /* indigo-700 */
+        }
+        .btn-secondary {
+            background-color: #e5e7eb; /* gray-200 */
+            color: #374151; /* gray-700 */
+            border-color: #d1d5db; /* gray-300 */
+        }
+        .btn-secondary:hover {
+            background-color: #d1d5db; /* gray-300 */
+        }
+        .btn-danger {
+            background-color: #dc2626; /* red-600 */
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: #b91c1c; /* red-700 */
+        }
+        .btn-success {
+            background-color: #16a34a; /* green-600 */
+            color: white;
+        }
+        .btn-success:hover {
+            background-color: #15803d; /* green-700 */
+        }
+        
+        /* Marquee style */
+        .marquee {
+            white-space: nowrap;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+        .marquee span {
+            display: inline-block;
+            padding-left: 100%;
+            animation: marquee 15s linear infinite;
+        }
+        @keyframes marquee {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(-100%, 0); }
+        }
+        /* Utility for word breaking */
+        .break-words {
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            -ms-word-break: break-all;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div id="toast-container"></div>
+
+    <div id="login-modal" class="modal-backdrop hidden">
+        <div class="modal-content bg-white p-8 rounded-xl shadow-lg w-full max-w-sm fade-in">
+            <h2 class="text-2xl font-bold mb-2 text-center text-gray-800">Đăng nhập Hệ thống</h2>
+            <p class="text-center text-gray-500 mb-6">Vui lòng nhập thông tin đăng nhập.</p>
+            <form id="login-form">
+                <div class="mb-4">
+                    <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" id="login-email" placeholder="email@example.com" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                </div>
+                <div class="mb-6">
+                    <label for="login-password" class="block text-sm font-medium text-gray-700">Mật khẩu</label>
+                    <input type="password" id="login-password" placeholder="••••••••" class="mt-1 w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                </div>
+                <div class="flex justify-end gap-4">
+                    <button type="button" id="btn-cancel-login" class="btn btn-secondary">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Đăng nhập</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODIFIED CONFIRMATION MODAL -->
+    <div id="confirmation-modal" class="modal-backdrop hidden">
+        <div class="modal-content bg-white w-full max-w-md rounded-xl shadow-lg p-8 fade-in">
+            <h3 id="confirmation-title" class="text-xl font-bold mb-4 text-center">Xác nhận</h3>
+            <p id="confirmation-message" class="mb-6 text-center text-gray-600">Bạn có chắc chắn muốn thực hiện hành động này không?</p>
+            
+            <!-- Container for additional details, hidden by default -->
+            <div id="confirmation-details" class="hidden mb-6 border-t border-b border-gray-200 py-4 space-y-3">
+                <!-- Details will be injected here by JavaScript -->
+            </div>
+
+            <div class="flex justify-center gap-4">
+                <button id="btn-confirm-cancel" class="btn btn-secondary">Hủy</button>
+                <button id="btn-confirm-action" class="btn btn-danger">Xác nhận</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-app">
+        <div class="flex h-screen bg-gray-50">
+            <aside class="w-64 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
+                <div class="h-20 flex items-center justify-center border-b border-gray-200 px-4">
+                    <img src="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExbGticnQyZXE4aTZwMHQ0MnJtNzBlcDd5ZXQ4Zng4OWxwdXhnbnE0ayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/CdZGyHXHkapMnflo3L/giphy.gif" alt="MRO Logo" class="h-16">
+                </div>
+                <nav id="sidebar-nav" class="flex-1 px-4 py-4 space-y-2">
+                    <a href="#dashboard" data-view="dashboard" class="sidebar-link flex items-center px-4 py-2.5 text-gray-600 rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-3"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+                        Tổng quan & Báo cáo
+                    </a>
+                    <a href="#inventory" data-view="inventory" class="sidebar-link flex items-center px-4 py-2.5 text-gray-600 rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-3"><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v2"/><path d="m7 21 5-5 5 5"/><path d="M22 12v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8"/><path d="M12 22V12"/></svg>
+                        Tồn kho
+                    </a>
+                    <a href="#transactions" data-view="transactions" class="sidebar-link flex items-center px-4 py-2.5 text-gray-600 rounded-lg">
+                       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-3"><path d="m17 2 4 4-4 4"/><path d="M3 12h18"/><path d="m7 22-4-4 4-4"/><path d="M21 12H3"/></svg>
+                        Lịch sử Giao dịch
+                    </a>
+                    <a href="#budget-control" id="budget-control-link" data-view="budget-control" class="sidebar-link flex items-center px-4 py-2.5 text-gray-600 rounded-lg hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-3"><circle cx="12" cy="12" r="8"/><path d="M12 18V6"/><path d="M16 12H8"/></svg>
+                        Kiểm soát Ngân sách
+                    </a>
+                    <a href="#inventory-check" id="inventory-check-link" data-view="inventory-check" class="sidebar-link flex items-center px-4 py-2.5 text-gray-600 rounded-lg hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-3"><path d="M8 17.5a1.5 1.5 0 0 1-3 0"/><path d="M19 17.5a1.5 1.5 0 0 1-3 0"/><path d="M15 12V6H3v6"/><path d="M15 6H4.5a1.5 1.5 0 0 0 0 3h12a1.5 1.5 0 0 1 0 3H12"/><path d="m16 12 5 6"/><path d="M21 12v6"/></svg>
+                        Kiểm kê Kho
+                    </a>
+                </nav>
+            </aside>
+
+            <main class="flex-1 flex flex-col">
+                <header class="h-20 bg-white border-b border-gray-200 flex-shrink-0 flex items-center justify-end px-6">
+                    <div id="auth-container">
+                        </div>
+                </header>
+                
+                <div class="overflow-y-auto">
+                    <div id="app-content" class="p-6 md:p-8">
+                        <div id="loading-indicator" class="flex justify-center items-center h-full">
+                            <div class="loader"></div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+        
+        <div id="item-modal" class="modal-backdrop hidden">
+            <div class="modal-content bg-white w-full max-w-lg rounded-xl shadow-lg p-8 fade-in">
+                <h3 id="item-modal-title" class="text-2xl font-bold mb-6">Thêm Sản phẩm Mới</h3>
+                <form id="item-form">
+                    <input type="hidden" id="item-id">
+                    <div class="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                        <div>
+                            <label for="item-name" class="block text-sm font-medium text-gray-700">Tên sản phẩm</label>
+                            <input type="text" id="item-name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="item-sku" class="block text-sm font-medium text-gray-700">Mã SKU</label>
+                                <input type="text" id="item-sku" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                            </div>
+                            <div>
+                                <label for="item-category" class="block text-sm font-medium text-gray-700">Danh mục</label>
+                                <input type="text" id="item-category" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="item-price" class="block text-sm font-medium text-gray-700">Đơn giá (VND)</label>
+                                <input type="number" id="item-price" min="0" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                            </div>
+                            <div>
+                                <label for="item-stock" id="item-stock-label" class="block text-sm font-medium text-gray-700">Tồn kho</label>
+                                <input type="number" id="item-stock" min="0" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="item-unit" class="block text-sm font-medium text-gray-700">Đơn vị tính</label>
+                            <input type="text" id="item-unit" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                        </div>
+                        <div>
+                            <label for="item-low-stock-threshold" class="block text-sm font-medium text-gray-700">Ngưỡng tồn kho thấp</label>
+                            <input type="number" id="item-low-stock-threshold" min="0" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                        </div>
+                        <div>
+                            <label for="item-supplier" class="block text-sm font-medium text-gray-700">Nhà cung cấp</label>
+                            <input type="text" id="item-supplier" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                    <div class="mt-8 flex justify-end gap-4">
+                        <button type="button" id="btn-cancel-item" class="btn btn-secondary">Hủy</button>
+                        <button type="submit" class="btn btn-primary">Lưu</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div id="transaction-modal" class="modal-backdrop hidden">
+            <div class="modal-content bg-white w-full max-w-4xl rounded-xl shadow-lg p-8 fade-in">
+                <h3 class="text-2xl font-bold mb-6">Tạo Giao dịch Mới</h3>
+                <form id="transaction-form">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 max-h-[75vh]">
+                        <div class="space-y-4">
+                            <div>
+                                <label for="transaction-date" class="block text-sm font-medium text-gray-700">Ngày giao dịch</label>
+                                <input type="date" id="transaction-date" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                            </div>
+                            <div>
+                                <label for="transaction-type" class="block text-sm font-medium text-gray-700">Loại giao dịch</label>
+                                <select id="transaction-type" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                                    <option value="export">Xuất kho</option>
+                                    <option value="pr-receipt" id="pr-receipt-option" class="hidden">Nhập kho từ PR</option>
+                                    <option value="adjustment" id="adjustment-option" class="hidden">Điều chỉnh Tồn kho (Admin)</option>
+                                </select>
+                            </div>
+                            <div id="pr-selection-container" class="hidden">
+                                <label for="transaction-pr-select" class="block text-sm font-medium text-gray-700">Chọn PR# để Nhập kho</label>
+                                <select id="transaction-pr-select" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="">-- Chưa chọn PR --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="transaction-location" class="block text-sm font-medium text-gray-700">Vị trí (Nhập/Xuất)</label>
+                                <select id="transaction-location" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="">-- Chọn vị trí --</option>
+                                    <option value="OP">OP</option>
+                                    <option value="CPT 1F">CPT 1F</option>
+                                    <option value="CPT 2F">CPT 2F</option>
+                                    <option value="Other">Khác</option>
+                                </select>
+                            </div>
+
+                            <div id="import-fields" class="space-y-4 hidden">
+                                <div>
+                                    <label for="transaction-importer-name" class="block text-sm font-medium text-gray-700">Tên người nhập</label>
+                                    <input type="text" id="transaction-importer-name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                            </div>
+                            <div id="export-fields" class="space-y-4 hidden">
+                                <div>
+                                    <label for="transaction-requester-name" class="block text-sm font-medium text-gray-700">Tên người yêu cầu</label>
+                                    <input type="text" id="transaction-requester-name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="transaction-receiver-msnv" class="block text-sm font-medium text-gray-700">Mã số nhân viên</label>
+                                    <input type="text" id="transaction-receiver-msnv" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="transaction-line" class="block text-sm font-medium text-gray-700">Chuyền</label>
+                                    <input type="text" id="transaction-line" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="transaction-line-leader" class="block text-sm font-medium text-gray-700">Line Leader</label>
+                                    <input type="text" id="transaction-line-leader" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="transaction-supervisor" class="block text-sm font-medium text-gray-700">Supervisor</label>
+                                    <input type="text" id="transaction-supervisor" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="transaction-issuer-name" class="block text-sm font-medium text-gray-700">Tên người xuất</label>
+                                    <input type="text" id="transaction-issuer-name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                            </div>
+                            <div id="adjustment-fields" class="space-y-4 hidden">
+                                <div>
+                                    <label for="transaction-adjuster-name" class="block text-sm font-medium text-gray-700">Tên người điều chỉnh</label>
+                                    <input type="text" id="transaction-adjuster-name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                            </div>
+                            <div>
+                                <label for="transaction-notes" class="block text-sm font-medium text-gray-700">Ghi chú (Lý do điều chỉnh)</label>
+                                <textarea id="transaction-notes" rows="3" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <div class="relative">
+                                <label for="transaction-item-search" class="block text-sm font-medium text-gray-700">Thêm sản phẩm vào giao dịch</label>
+                                <input type="text" id="transaction-item-search" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Tìm kiếm sản phẩm..." autocomplete="off">
+                                <div id="transaction-item-suggestions" class="absolute z-20 bg-white border border-gray-300 rounded-md shadow-lg w-full max-h-48 overflow-y-auto mt-1 hidden"></div>
+                            </div>
+                            
+                            <p class="text-lg font-bold mt-6 mb-2">Danh sách Sản phẩm</p>
+                            <div id="transaction-items-list-container" class="flex-grow bg-gray-50 border rounded-lg p-2 overflow-y-auto min-h-[250px]">
+                                </div>
+                            <div id="grand-total-container" class="mt-4 text-right">
+                                <span class="text-xl font-bold">Tổng cộng:</span>
+                                <span id="transaction-grand-total" class="text-xl font-bold text-indigo-600 ml-2">0 ₫</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-8 flex justify-end gap-4">
+                        <button type="button" id="btn-cancel-transaction" class="btn btn-secondary">Hủy</button>
+                        <button type="submit" class="btn btn-primary">Xác nhận Giao dịch</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="budget-modal" class="modal-backdrop hidden">
+            <div class="modal-content bg-white w-full max-w-lg rounded-xl shadow-lg p-8 fade-in">
+                <h3 id="budget-modal-title" class="text-2xl font-bold mb-6">Thêm Ngân sách</h3>
+                <form id="budget-form">
+                    <input type="hidden" id="budget-id">
+                    <div class="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="budget-period-from" class="block text-sm font-medium text-gray-700">Từ ngày</label>
+                                <input type="date" id="budget-period-from" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required>
+                            </div>
+                            <div>
+                                <label for="budget-period-to" class="block text-sm font-medium text-gray-700">Đến ngày</label>
+                                <input type="date" id="budget-period-to" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="budget-no" class="block text-sm font-medium text-gray-700">Số Ngân sách</label>
+                            <input type="text" id="budget-no" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="budget-value-usd" class="block text-sm font-medium text-gray-700">Giá trị (USD)</label>
+                                <input type="number" id="budget-value-usd" min="0" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
+                            </div>
+                            <div>
+                                <label for="budget-value-vnd" class="block text-sm font-medium text-gray-700">Giá trị (VND)</label>
+                                <input type="number" id="budget-value-vnd" min="0" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" readonly>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="budget-category" class="block text-sm font-medium text-gray-700">Mô tả Ngân sách</label>
+                            <input type="text" id="budget-category" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required>
+                        </div>
+                        <div>
+                            <label for="budget-remark" class="block text-sm font-medium text-gray-700">Ghi chú</label>
+                            <textarea id="budget-remark" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-8 flex justify-end gap-4">
+                        <button type="button" id="btn-cancel-budget" class="btn btn-secondary">Hủy</button>
+                        <button type="submit" class="btn btn-primary">Lưu</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="pr-modal" class="modal-backdrop hidden">
+            <div class="modal-content bg-white w-full max-w-6xl rounded-xl shadow-lg p-8 fade-in">
+                <h3 class="text-2xl font-bold mb-2">Tạo Yêu cầu Mua hàng (PR)</h3>
+                <p class="text-gray-500 mb-6">Tạo yêu cầu để mua vật tư cần thiết.</p>
+                <form id="pr-form">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 max-h-[75vh] overflow-y-auto">
+                        <div class="flex flex-col space-y-4">
+                             <div>
+                                <label for="pr-number" class="block text-sm font-medium text-gray-700">Số PR (Thủ công)</label>
+                                <input type="text" id="pr-number" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required>
+                            </div>
+                            <div>
+                                <label for="pr-date" class="block text-sm font-medium text-gray-700">Ngày tạo PR</label>
+                                <input type="date" id="pr-date" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required>
+                            </div>
+                            <div>
+                                <label for="pr-budget" class="block text-sm font-medium text-gray-700">Chọn Ngân sách</label>
+                                <select id="pr-budget" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                                    <option value="">-- Chọn Ngân sách --</option>
+                                    </select>
+                            </div>
+                            <div class="relative">
+                                <label for="pr-item-search" class="block text-sm font-medium text-gray-700">Thêm sản phẩm vào PR</label>
+                                <input type="text" id="pr-item-search" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Tìm kiếm sản phẩm..." autocomplete="off">
+                                <div id="pr-item-suggestions" class="absolute z-20 bg-white border border-gray-300 rounded-md shadow-lg w-full max-h-48 overflow-y-auto mt-1 hidden"></div>
+                            </div>
+                             <div class="border-t pt-4 mt-4">
+                                 <div class="flex items-center justify-between">
+                                     <label for="pr-items-csv-input" class="block text-sm font-medium text-gray-700">Hoặc Nhập sản phẩm từ CSV</label>
+                                     <button type="button" id="btn-download-pr-items-template" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">Tải mẫu</button>
+                                 </div>
+                                 <input type="file" id="pr-items-csv-input" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                             </div>
+                        </div>
+                        <div class="flex flex-col">
+                            
+                            <h4 class="font-bold text-lg mt-6 mb-2">Danh sách Vật tư Yêu cầu</h4>
+                            <div id="pr-items-list-container" class="flex-grow bg-gray-50 border rounded-lg p-2 overflow-y-auto min-h-[250px]">
+                                </div>
+                             <div class="mt-4 text-right">
+                                <span class="text-xl font-bold">Tổng cộng:</span>
+                                <span id="pr-grand-total" class="text-xl font-bold text-indigo-600 ml-2">0 ₫</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-8 flex justify-end gap-4">
+                        <button type="button" id="btn-cancel-pr" class="btn btn-secondary">Hủy</button>
+                        <button type="submit" class="btn btn-primary">Tạo PR</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-analytics.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+        import { getFirestore, collection, doc, getDoc, getDocs, setDoc, onSnapshot, addDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp, query, where, writeBatch } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+        // --- FIREBASE CONFIG ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBrHzCqNSmVON0kGIqOI2f89As8HBOUroA",
+            authDomain: "mrocontrol.firebaseapp.com",
+            projectId: "mrocontrol",
+            storageBucket: "mrocontrol.appspot.com",
+            messagingSenderId: "116842817843",
+            appId: "1:116842817843:web:a623be55cd09babb353646",
+            measurementId: "G-VVPHG9W4RX"
+        };
+
+        // --- FIREBASE INITIALIZATION ---
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- GLOBAL APP STATE ---
+        const state = {
+            currentUser: null,
+            inventory: [],
+            transactions: [],
+            budgets: [],
+            purchaseRequisitions: [],
+            currentTransactionItems: [],
+            currentPRItems: [],
+            parsedCSVData: [],
+            charts: {},
+            currentView: 'dashboard',
+            inventorySort: { key: 'name', order: 'asc' },
+            budgetChartType: 'line', // 'bar' or 'line'
+            unsubInventory: null,
+            unsubTransactions: null,
+            unsubBudgets: null,
+            unsubPRs: null,
+            usdToVndRate: 25000 // Default exchange rate
+        };
+        
+        // Register ChartJS plugins
+        Chart.register(ChartDataLabels);
+
+        // --- UTILITY FUNCTIONS ---
+        const formatCurrency = (value, currency = 'VND') => {
+            const options = { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: (currency === 'USD' ? 2 : 0) };
+            return new Intl.NumberFormat('vi-VN', options).format(value || 0);
+        }
+        
+        const showToast = (message, type = 'success') => {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+            toast.className = `toast-notification ${bgColor} text-white py-2 px-4 rounded-lg shadow-md`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        };
+
+        // MODIFIED CONFIRMATION MODAL FUNCTION
+        const showConfirmationModal = (message, onConfirm, details = null) => {
+            const modal = document.getElementById('confirmation-modal');
+            modal.querySelector('#confirmation-message').textContent = message;
+            const detailsContainer = modal.querySelector('#confirmation-details');
+            const confirmBtn = document.getElementById('btn-confirm-action');
+
+            // Reset button style to default (danger)
+            confirmBtn.classList.remove('btn-success');
+            confirmBtn.classList.add('btn-danger');
+
+            detailsContainer.innerHTML = ''; // Clear previous details
+
+            if (details && typeof details === 'object' && Object.keys(details).length > 0) {
+                let detailsHTML = '';
+                for (const [key, value] of Object.entries(details)) {
+                    detailsHTML += `
+                        <div class="flex justify-between items-start gap-4">
+                            <span class="font-semibold text-gray-600 whitespace-nowrap">${key}:</span>
+                            <span class="text-gray-800 text-right break-words">${value}</span>
+                        </div>
+                    `;
+                }
+                detailsContainer.innerHTML = detailsHTML;
+                detailsContainer.classList.remove('hidden');
+                
+                // If details are for a PR, change button to success
+                if (details['Số PR']) {
+                    confirmBtn.classList.remove('btn-danger');
+                    confirmBtn.classList.add('btn-success');
+                    confirmBtn.textContent = 'Xác nhận Tạo PR';
+                    modal.querySelector('#confirmation-title').textContent = 'Xác nhận Yêu cầu Mua hàng';
+                }
+
+            } else {
+                detailsContainer.classList.add('hidden');
+                confirmBtn.textContent = 'Xác nhận';
+                modal.querySelector('#confirmation-title').textContent = 'Xác nhận';
+            }
+
+            modal.classList.remove('hidden');
+
+            // This is a common pattern to avoid stacking event listeners on modals.
+            // We clone the button to remove any previous listeners.
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+            
+            const cancelBtn = document.getElementById('btn-confirm-cancel');
+            const newCancelBtn = cancelBtn.cloneNode(true);
+            cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+
+            const closeConfirmation = () => {
+                modal.classList.add('hidden');
+            };
+            
+            const handleConfirm = () => {
+                onConfirm();
+                closeConfirmation();
+            };
+
+            newConfirmBtn.addEventListener('click', handleConfirm, { once: true });
+            newCancelBtn.addEventListener('click', closeConfirmation, { once: true });
+        };
+        
+        const getStockStatus = (item) => {
+            if (item.stock <= 0) return { text: 'Hết hàng', class: 'bg-red-100 text-red-800', value: 'out-of-stock' };
+            if (item.stock > 0 && item.stock <= item.lowStockThreshold) return { text: 'Sắp hết hàng', class: 'bg-yellow-100 text-yellow-800', value: 'low-stock' };
+            return { text: 'Còn hàng', class: 'bg-green-100 text-green-800', value: 'in-stock' };
+        };
+
+        const downloadCSVTemplate = (headers, filename) => {
+            let csvContent = "\ufeff" + headers.join(",") + "\n";
+            const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        // --- UI RENDER & NAVIGATION ---
+        const appContent = document.getElementById('app-content');
+        
+        const navigateTo = (view) => {
+            state.currentView = view;
+            renderAppContent();
+            document.querySelectorAll('.sidebar-link').forEach(link => {
+                link.classList.toggle('active', link.dataset.view === view);
+            });
+            window.location.hash = view;
+        };
+        
+        const renderAppContent = () => {
+            appContent.innerHTML = ''; // Clear old content
+            let viewHTML = '';
+            switch(state.currentView) {
+                case 'inventory':
+                    viewHTML = `
+                        <section id="inventory-view" class="view-section fade-in">
+                            <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+                                <div>
+                                    <h2 class="text-3xl font-bold text-gray-800 mb-2">Quản lý Tồn kho</h2>
+                                    <p class="text-gray-500">Tìm kiếm, lọc và quản lý tất cả các mặt hàng trong kho.</p>
+                                </div>
+                            </div>
+
+                            <div id="admin-actions-panel" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6 hidden">
+                                <h3 class="text-xl font-bold text-gray-800 mb-4">Hành động của Quản trị viên</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                                    <div class="md:col-span-2">
+                                        <label for="quick-action-item-search" class="block text-sm font-medium text-gray-700">Chọn một sản phẩm để chỉnh sửa hoặc xóa</label>
+                                        <div class="relative">
+                                            <input type="text" id="quick-action-item-search" placeholder="Bắt đầu nhập tên hoặc SKU..." class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" autocomplete="off">
+                                            <div id="quick-action-item-suggestions" class="absolute z-20 bg-white border border-gray-300 rounded-md shadow-lg w-full max-h-60 overflow-y-auto mt-1 hidden"></div>
+                                            <input type="hidden" id="quick-action-selected-item-id">
+                                        </div>
+                                        <div id="quick-action-selected-item-details" class="mt-2 text-sm text-gray-600 h-10"></div>
+                                    </div>
+                                    <div class="flex items-center gap-2 pt-6">
+                                        <button id="btn-quick-edit" class="btn btn-primary hidden w-full">Sửa</button>
+                                        <button id="btn-quick-delete" class="btn btn-danger hidden w-full">Xóa</button>
+                                    </div>
+                                </div>
+                                <div class="border-t border-gray-200 mt-4 pt-4 flex gap-4">
+                                    <button id="btn-add-item-from-form" class="btn btn-primary">
+                                        + Thêm Sản phẩm Mới
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+                                    <input type="text" id="inventory-search" placeholder="Lọc danh sách bên dưới..." class="w-full md:w-1/3 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <div class="flex gap-2 items-center">
+                                        <select id="inventory-filter-category" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                            <option value="all">Tất cả Danh mục</option>
+                                        </select>
+                                        <select id="inventory-filter-status" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                            <option value="all">Tất cả Trạng thái</option>
+                                            <option value="in-stock">Còn hàng</option>
+                                            <option value="low-stock">Sắp hết hàng</option>
+                                            <option value="out-of-stock">Hết hàng</option>
+                                        </select>
+                                        <button id="btn-export-inventory-csv" class="btn btn-success">Xuất CSV</button>
+                                    </div>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left">
+                                        <thead class="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th class="p-4 font-semibold sortable-header" data-sort-key="name">Sản phẩm <span class="sort-icon"></span></th>
+                                                <th class="p-4 font-semibold sortable-header" data-sort-key="sku">SKU <span class="sort-icon"></span></th>
+                                                <th class="p-4 font-semibold sortable-header" data-sort-key="category">Danh mục <span class="sort-icon"></span></th>
+                                                <th class="p-4 font-semibold sortable-header text-right" data-sort-key="stock">Tồn kho <span class="sort-icon"></span></th>
+                                                <th class="p-4 font-semibold sortable-header text-right" data-sort-key="price">Giá <span class="sort-icon"></span></th>
+                                                <th class="p-4 font-semibold sortable-header" data-sort-key="status">Trạng thái <span class="sort-icon"></span></th>
+                                                <th class="p-4 font-semibold text-center">Hành động</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="inventory-table-body"><tr><td colspan="7" class="text-center p-8"><div class="loader mx-auto"></div></td></tr></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </section>`;
+                    break;
+                case 'transactions':
+                    viewHTML = `
+                        <section id="transactions-view" class="view-section fade-in">
+                            <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+                                <div>
+                                    <h2 class="text-3xl font-bold text-gray-800 mb-2">Lịch sử Giao dịch</h2>
+                                    <p class="text-gray-500">Theo dõi tất cả các hoạt động xuất kho và điều chỉnh.</p>
+                                </div>
+                                <div class="flex gap-4">
+                                    <button id="btn-export-transactions-csv" class="btn btn-success">
+                                        Xuất ra CSV
+                                    </button>
+                                    <div id="new-transaction-buttons" class="flex gap-2">
+                                        <button id="btn-new-transaction-export" class="btn btn-primary">
+                                            + Xuất kho
+                                        </button>
+                                         <button id="btn-new-transaction-import" class="btn btn-primary bg-teal-600 hover:bg-teal-700">
+                                            + Nhập kho
+                                        </button>
+                                        <button id="btn-new-transaction-adjust" class="btn btn-secondary hidden">
+                                            + Điều chỉnh
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
+                                <div class="flex flex-wrap items-center gap-4">
+                                    <input type="text" id="transaction-filter-sku" placeholder="Lọc theo SKU sản phẩm..." class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <input type="date" id="transaction-filter-start-date" class="px-4 py-2 border border-gray-300 rounded-lg">
+                                    <span class="text-gray-600">đến</span>
+                                    <input type="date" id="transaction-filter-end-date" class="px-4 py-2 border border-gray-300 rounded-lg">
+                                    <button id="btn-apply-transaction-filter" class="btn btn-secondary">Áp dụng</button>
+                                </div>
+                            </div>
+                            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left">
+                                        <thead class="bg-gray-50 border-b border-gray-200">
+                                            <tr>
+                                                <th class="p-4 font-semibold">Ngày</th>
+                                                <th class="p-4 font-semibold">Loại giao dịch</th>
+                                                <th class="p-4 font-semibold">Sản phẩm</th>
+                                                <th class="p-4 font-semibold text-right">Số lượng</th>
+                                                <th class="p-4 font-semibold">Đơn vị</th>
+                                                <th class="p-4 font-semibold text-right">Đơn giá</th>
+                                                <th class="p-4 font-semibold text-right">Thành tiền</th>
+                                                <th class="p-4 font-semibold">Người thực hiện</th>
+                                                <th class="p-4 font-semibold">Nhà cung cấp</th>
+                                                <th class="p-4 font-semibold">Người yêu cầu</th>
+                                                <th class="p-4 font-semibold">Vị trí</th>
+                                                <th class="p-4 font-semibold">Chuyền</th>
+                                                <th class="p-4 font-semibold">Line Leader</th>
+                                                <th class="p-4 font-semibold">Supervisor</th>
+                                                <th class="p-4 font-semibold">Mã nhân viên</th>
+                                                <th class="p-4 font-semibold">Ghi chú</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="transactions-table-body"><tr><td colspan="17" class="text-center p-8"><div class="loader mx-auto"></div></td></tr></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </section>`;
+                    break;
+                case 'inventory-check':
+                    viewHTML = `
+                        <section id="inventory-check-view" class="view-section fade-in space-y-8">
+                             <div>
+                                <h2 class="text-3xl font-bold text-gray-800 mb-2">Kiểm kê & Đặt lại Dữ liệu</h2>
+                                <p class="text-gray-500">Thực hiện kiểm kê cuối năm, xóa dữ liệu cũ và nhập danh sách sản phẩm mới.</p>
+                            </div>
+                            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                <h3 class="text-xl font-bold text-red-600 mb-2">Cảnh báo: Hành động Nguy hiểm</h3>
+                                <p class="text-gray-600 mb-4">Chức năng này sẽ <strong class="text-red-700">XÓA TẤT CẢ</strong> sản phẩm, giao dịch và ngân sách hiện tại. Dữ liệu đã xóa không thể khôi phục. Chỉ tiếp tục nếu bạn chắc chắn muốn bắt đầu một chu kỳ kiểm kê mới.</p>
+                                <div class="border-t pt-4">
+                                    <div class="flex items-center justify-between">
+                                        <label for="csv-file-input" class="block text-sm font-medium text-gray-700 mb-2">1. Chọn tệp CSV để nhập</label>
+                                        <button id="btn-download-inventory-template" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">Tải mẫu</button>
+                                    </div>
+                                    <input type="file" id="csv-file-input" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                                    <p class="text-xs text-gray-500 mt-1">Tệp CSV phải có các cột: Tên sản phẩm, Mã SKU, Danh mục, Đơn giá, Tồn kho, Ngưỡng tồn kho thấp, Nhà cung cấp, Đơn vị</p>
+                                    
+                                    <div id="csv-preview-container" class="mt-4 hidden">
+                                        <h4 class="font-semibold mb-2">Xem trước Dữ liệu:</h4>
+                                        <div class="overflow-x-auto border rounded-lg max-h-60">
+                                            <table class="w-full text-sm">
+                                                <thead id="csv-preview-header" class="bg-gray-50 sticky top-0"></thead>
+                                                <tbody id="csv-preview-body"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <button id="btn-reset-and-import" class="mt-6 w-full btn btn-danger disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>2. Xóa tất cả Dữ liệu cũ và Nhập mới</button>
+                                </div>
+                            </div>
+                        </section>
+                    `;
+                    break;
+                case 'budget-control':
+                    viewHTML = `
+                        <section id="budget-control-view" class="view-section fade-in space-y-8">
+                             <div>
+                                <h2 class="text-3xl font-bold text-gray-800 mb-2">Kiểm soát Ngân sách & Mua hàng</h2>
+                                <p class="text-gray-500">Quản lý ngân sách và tạo yêu cầu mua hàng (PR).</p>
+                            </div>
+
+                            <div id="budget-management-panel" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                <h3 class="text-xl font-bold text-gray-800 mb-4">Danh sách Ngân sách</h3>
+                                <div id="admin-budget-actions" class="flex justify-between items-center mb-4 hidden">
+                                     <div class="flex items-center gap-4">
+                                        <button id="btn-add-budget" class="btn btn-primary">+ Thêm Ngân sách</button>
+                                    </div>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="p-4 font-semibold">Số Ngân sách</th>
+                                                <th class="p-4 font-semibold">Danh mục</th>
+                                                <th class="p-4 font-semibold">Kỳ</th>
+                                                <th class="p-4 font-semibold text-right">Giá trị (VND)</th>
+                                                <th class="p-4 font-semibold text-right">Còn lại (VND)</th>
+                                                <th class="p-4 font-semibold text-right">Giá trị (USD)</th>
+                                                <th class="p-4 font-semibold">Người nhập</th>
+                                                <th class="p-4 font-semibold">Ghi chú</th>
+                                                <th id="budget-actions-header" class="p-4 font-semibold text-center hidden">Hành động</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="budgets-table-body"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-xl font-bold text-gray-800">Yêu cầu Mua hàng (PR)</h3>
+                                    <div id="pr-creation-buttons" class="flex items-center gap-4">
+                                        <button id="btn-create-pr" class="btn btn-success">+ Tạo PR mới</button>
+                                    </div>
+                                </div>
+                                <div class="overflow-x-auto mt-4">
+                                    <table class="w-full text-left">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="p-4 font-semibold">Số PR</th>
+                                                <th class="p-4 font-semibold">Ngày tạo</th>
+                                                <th class="p-4 font-semibold">Người tạo</th>
+                                                <th class="p-4 font-semibold text-right">Tổng giá trị</th>
+                                                <th class="p-4 font-semibold text-center">Trạng thái</th>
+                                                <th class="p-4 font-semibold text-center">Hành động</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="pr-table-body"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </section>
+                    `;
+                    break;
+                default: // Dashboard
+                    viewHTML = `
+                        <section id="dashboard-view" class="view-section fade-in space-y-8">
+                            <div class="bg-white p-1 rounded-xl shadow-sm border border-gray-200 marquee">
+                                <h2 class="text-4xl font-bold" style="color: #4338ca;"><span>KIỂM SOÁT MRO SẢN XUẤT OP CỦ CHI</span></h2>
+                            </div>
+                            
+                            <!-- Global Filters -->
+                             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                                <div class="flex flex-wrap items-center gap-4">
+                                    <label class="font-semibold">Lọc chung theo ngày:</label>
+                                    <input type="date" id="global-filter-start-date" class="px-4 py-2 border border-gray-300 rounded-lg">
+                                    <span class="text-gray-600">đến</span>
+                                    <input type="date" id="global-filter-end-date" class="px-4 py-2 border border-gray-300 rounded-lg">
+                                    <button id="btn-apply-global-filter" class="btn btn-primary">Áp dụng</button>
+                                    <button id="btn-reset-global-filter" class="btn btn-secondary">Reset</button>
+                                </div>
+                            </div>
+
+                            <!-- KPIs Row -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+                                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                    <h3 class="text-sm font-medium text-gray-500">Tổng giá trị Tồn kho</h3>
+                                    <p id="kpi-total-value" class="text-3xl font-bold text-gray-800 mt-2 break-words">0 ₫</p>
+                                    <p id="kpi-total-value-usd" class="text-md font-semibold text-gray-500 mt-1 break-words">$0.00</p>
+                                </div>
+                                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><h3 class="text-sm font-medium text-gray-500">Tổng số Mặt hàng</h3><p id="kpi-total-items" class="text-3xl font-bold text-gray-800 mt-2">0</p></div>
+                                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><h3 class="text-sm font-medium text-gray-500">Hàng sắp hết</h3><p id="kpi-low-stock" class="text-3xl font-bold text-yellow-500 mt-2">0</p></div>
+                                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><h3 class="text-sm font-medium text-gray-500">Hàng có sẵn</h3><p id="kpi-available-items" class="text-3xl font-bold text-green-500 mt-2">0</p></div>
+                                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 lg:col-span-2">
+                                     <h3 class="font-semibold text-gray-700 mb-2 text-center">Sử dụng Ngân sách chung</h3>
+                                    <div class="text-center space-y-1">
+                                        <div><span class="text-xs text-gray-500">Đã chi: </span><span id="kpi-budget-spent" class="font-bold text-red-500">0 ₫</span> / <span id="kpi-budget-spent-usd" class="font-semibold text-red-400">$0.00</span></div>
+                                        <div><span class="text-xs text-gray-500">Tổng: </span><span id="kpi-budget-total" class="font-bold text-gray-700">0 ₫</span> / <span id="kpi-budget-total-usd" class="font-semibold text-gray-500">$0.00</span></div>
+                                        <div><span class="text-xs text-gray-500">Còn lại: </span><span id="kpi-budget-remaining" class="font-bold text-green-600">0 ₫</span> / <span id="kpi-budget-remaining-usd" class="font-semibold text-green-500">$0.00</span></div>
+                                    </div>
+                                    <div class="chart-container !h-[60px] mt-2"><canvas id="totalBudgetPieChart"></canvas></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Main Budget Chart -->
+                            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+                                    <h3 class="font-semibold text-lg text-gray-700">Xu hướng & Kế hoạch Chi tiêu theo Ngân sách</h3>
+                                     <div class="flex items-center gap-4">
+                                        <div class="flex items-center gap-2">
+                                            <input type="date" id="budget-chart-filter-start-date" class="px-2 py-1 border border-gray-300 rounded-lg text-sm">
+                                            <span class="text-gray-500 text-sm">đến</span>
+                                            <input type="date" id="budget-chart-filter-end-date" class="px-2 py-1 border border-gray-300 rounded-lg text-sm">
+                                            <button id="btn-apply-budget-chart-filter" class="btn btn-secondary !py-1 !px-2 !text-sm">Lọc</button>
+                                        </div>
+                                        <div class="inline-flex rounded-md shadow-sm" role="group">
+                                          <button type="button" id="btn-budget-chart-bar" class="px-3 py-1 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-l-lg hover:bg-gray-100 focus:z-10 focus:ring-2 focus:ring-indigo-500">Cột</button>
+                                          <button type="button" id="btn-budget-chart-line" class="px-3 py-1 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-r-lg hover:bg-gray-100 focus:z-10 focus:ring-2 focus:ring-indigo-500">Đường</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="chart-container-large"><canvas id="budgetSpendingDetailChart"></canvas></div>
+                            </div>
+
+                            <!-- Daily Trends Chart -->
+                            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+                                    <h3 class="font-semibold text-lg text-gray-700">Xu hướng Nhập/Xuất Hàng ngày</h3>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-medium text-gray-600">Xem theo:</span>
+                                        <select id="daily-trends-metric-filter" class="px-3 py-1 border border-gray-300 rounded-lg text-sm">
+                                            <option value="quantity">Số lượng</option>
+                                            <option value="value">Giá trị (VND)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="chart-container"><canvas id="dailyTrendsChart"></canvas></div>
+                            </div>
+
+                            <!-- Proportion Charts Row -->
+                             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                    <h3 class="font-semibold text-lg text-gray-700 mb-4">Tỷ trọng Chi tiêu theo Ngân sách</h3>
+                                    <div class="chart-container"><canvas id="budgetSpendingProportionChart"></canvas></div>
+                                </div>
+                                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                     <div class="flex flex-col gap-4">
+                                        <h3 class="font-semibold text-gray-700">Phân bố Văn phòng phẩm</h3>
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <select id="stationery-group-by-filter" class="px-2 py-1 border border-gray-300 rounded-lg text-sm">
+                                                <option value="line">Xem theo Chuyền</option>
+                                                <option value="lineLeader">Xem theo Line Leader</option>
+                                                <option value="supervisor">Xem theo Supervisor</option>
+                                            </select>
+                                            <select id="stationery-metric-filter" class="px-2 py-1 border border-gray-300 rounded-lg text-sm">
+                                                <option value="value">Theo Giá trị</option>
+                                                <option value="quantity">Theo Số lượng</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="chart-container mt-4"><canvas id="stationeryDistributionChart"></canvas></div>
+                                </div>
+                            </div>
+
+                            <!-- Top Items & Recent Transactions Row -->
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                    <h3 class="font-semibold text-gray-700 mb-4">Top 10 Mặt hàng Tiêu thụ nhiều nhất</h3>
+                                    <div class="chart-container"><canvas id="topConsumedItemsChart"></canvas></div>
+                                </div>
+                                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                    <h3 class="font-semibold text-gray-700 mb-4">Top 10 Mặt hàng sắp hết</h3>
+                                    <div class="chart-container"><canvas id="topLowStockChart"></canvas></div>
+                                </div>
+                                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                                    <h3 class="font-semibold text-gray-700 mb-4">5 Giao dịch gần nhất</h3>
+                                    <div id="recent-transactions-list" class="space-y-3 overflow-y-auto h-[300px] pr-2">
+                                        <!-- Content will be rendered by JS -->
+                                    </div>
+                                </div>
+                            </div>
+                        </section>`;
+                    break;
+            }
+            appContent.innerHTML = viewHTML;
+            refreshUI();
+        };
+        
+        const refreshUI = () => {
+            if (state.currentView === 'inventory') renderInventory();
+            if (state.currentView === 'transactions') renderTransactions();
+            if (state.currentView === 'dashboard') renderDashboard();
+            if (state.currentView === 'inventory-check') renderInventoryCheck();
+            if (state.currentView === 'budget-control') renderBudgetControlView();
+
+            populateFilters();
+            updateUIAfterAuthChange();
+        };
+        
+        // --- RENDER FUNCTIONS ---
+        const renderInventoryCheck = () => { /* Setup handled in initApp */ };
+
+        const renderBudgetControlView = () => {
+            renderBudgets();
+            renderPRs();
+        };
+
+        const renderBudgets = () => {
+            const tableBody = document.getElementById('budgets-table-body');
+            const actionsHeader = document.getElementById('budget-actions-header');
+            if(!tableBody || !actionsHeader) return;
+            
+            const isAdmin = state.currentUser && state.currentUser.role === 'admin';
+            actionsHeader.classList.toggle('hidden', !isAdmin);
+            
+            tableBody.innerHTML = '';
+            
+            if (state.budgets.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="${isAdmin ? '9' : '8'}" class="text-center p-8 text-gray-500">Chưa có ngân sách nào được tạo.</td></tr>`;
+                return;
+            }
+
+            state.budgets.forEach(budget => {
+                const remaining = (budget.valueVND || 0) - (budget.spent || 0);
+                const adminActions = isAdmin ? `
+                    <td class="p-4 text-center space-x-2">
+                        <button data-id="${budget.id}" class="btn-edit-budget text-indigo-600 hover:text-indigo-800 font-medium">Sửa</button>
+                        <button data-id="${budget.id}" class="btn-delete-budget text-red-600 hover:text-red-800 font-medium">Xóa</button>
+                    </td>` : '';
+                const row = `
+                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <td class="p-4 text-gray-600">${budget.budgetNo}</td>
+                        <td class="p-4">${budget.category}</td>
+                        <td class="p-4">${budget.periodFrom} - ${budget.periodTo}</td>
+                        <td class="p-4 text-right">${formatCurrency(budget.valueVND)}</td>
+                        <td class="p-4 text-right font-semibold ${remaining > 0 ? 'text-green-600' : 'text-red-600'}">${formatCurrency(remaining)}</td>
+                        <td class="p-4 text-right">${formatCurrency(budget.valueUSD, 'USD')}</td>
+                        <td class="p-4 text-gray-600">${budget.userEmail}</td>
+                        <td class="p-4 text-gray-500">${budget.remark || ''}</td>
+                        ${adminActions}
+                    </tr>
+                `;
+                tableBody.insertAdjacentHTML('beforeend', row);
+            });
+        };
+        
+        const renderPRs = () => {
+            const tableBody = document.getElementById('pr-table-body');
+            if(!tableBody) return;
+            tableBody.innerHTML = '';
+
+            if (state.purchaseRequisitions.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="6" class="text-center p-8 text-gray-500">Không tìm thấy yêu cầu mua hàng nào.</td></tr>`;
+                return;
+            }
+            
+            const isAdmin = state.currentUser && state.currentUser.role === 'admin';
+            const sortedPRs = [...state.purchaseRequisitions].sort((a,b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0));
+
+            sortedPRs.forEach(pr => {
+                const totalValue = pr.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+                let statusText, statusClass;
+                 if (pr.status === 'completed') {
+                    statusText = 'Hoàn thành';
+                    statusClass = 'bg-blue-100 text-blue-800';
+                } else if (pr.status === 'approved') {
+                    statusText = 'Đã duyệt';
+                    statusClass = 'bg-green-100 text-green-800';
+                } else if (pr.status === 'cancelled') {
+                    statusText = 'Đã hủy';
+                    statusClass = 'bg-red-100 text-red-800';
+                } else {
+                    statusText = 'Chờ duyệt';
+                    statusClass = 'bg-yellow-100 text-yellow-800';
+                }
+                
+                let actionButtons = ``;
+                if(isAdmin && pr.status === 'pending') {
+                    actionButtons = `
+                        <button data-id="${pr.id}" class="btn-approve-pr text-green-600 hover:text-green-800 font-medium">Duyệt</button>
+                        <button data-id="${pr.id}" class="btn-cancel-pr-admin text-red-600 hover:text-red-800 font-medium">Hủy</button>
+                    `;
+                } else if (pr.status === 'approved' && pr.items.some(item => (item.receivedQty || 0) < item.quantity)) {
+                     actionButtons = `
+                        <button data-id="${pr.id}" class="btn-receive-pr btn btn-primary !py-1 !px-2 !text-sm">Nhận hàng</button>
+                    `;
+                } else {
+                    actionButtons = `<span class="text-gray-400 text-xs">N/A</span>`;
+                }
+                
+                const prDate = pr.createdAt?.toDate ? new Date(pr.createdAt.toDate()) : new Date();
+
+                const row = `
+                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <td class="p-4 text-gray-600 font-mono">${pr.prNo}</td>
+                        <td class="p-4">${prDate.toLocaleDateString('vi-VN')}</td>
+                        <td class="p-4 text-gray-600">${pr.userEmail}</td>
+                        <td class="p-4 text-right">${formatCurrency(totalValue)}</td>
+                        <td class="p-4 text-center">
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full ${statusClass}">${statusText}</span>
+                        </td>
+                         <td class="p-4 text-center space-x-2">${actionButtons}</td>
+                    </tr>
+                `;
+                tableBody.insertAdjacentHTML('beforeend', row);
+            });
+        };
+
+
+        const renderDashboard = () => {
+            const startDate = document.getElementById('global-filter-start-date')?.value;
+            const endDate = document.getElementById('global-filter-end-date')?.value;
+
+            const filteredTransactions = state.transactions.filter(tx => {
+                if (!startDate && !endDate) return true;
+                const txDate = new Date(tx.date);
+                const matchesStart = !startDate || txDate >= new Date(startDate);
+                const matchesEnd = !endDate || txDate <= new Date(endDate);
+                return matchesStart && matchesEnd;
+            });
+
+            updateDashboardKPIs(filteredTransactions);
+            
+            renderRemainingBudgetChart(filteredTransactions);
+            renderBudgetSpendingDetailChart(); // Removed parameter, will use its own filter
+            renderBudgetSpendingProportionChart(filteredTransactions);
+            renderDailyTrendsChart(filteredTransactions);
+            renderStationeryDistributionChart(filteredTransactions);
+            renderTopConsumedItemsChart(filteredTransactions);
+            renderTopLowStockChart();
+            renderRecentTransactions(filteredTransactions);
+        };
+
+        const renderInventory = () => {
+            const tableBody = document.getElementById('inventory-table-body');
+            if (!tableBody) return;
+            
+            const searchTerm = document.getElementById('inventory-search')?.value.toLowerCase() || '';
+            const categoryFilter = document.getElementById('inventory-filter-category')?.value || 'all';
+            const statusFilter = document.getElementById('inventory-filter-status')?.value || 'all';
+            
+            const sortKey = state.inventorySort.key;
+            const sortOrder = state.inventorySort.order;
+            const sortedInventory = [...state.inventory].sort((a, b) => {
+                let valA, valB;
+                if (sortKey === 'status') {
+                    valA = getStockStatus(a).value;
+                    valB = getStockStatus(b).value;
+                } else {
+                    valA = a[sortKey];
+                    valB = b[sortKey];
+                }
+
+                if (typeof valA === 'string') {
+                    return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                } else {
+                    return sortOrder === 'asc' ? valA - valB : valB - valA;
+                }
+            });
+
+            document.querySelectorAll('.sortable-header').forEach(header => {
+                header.classList.remove('sort-asc', 'sort-desc');
+                const icon = header.querySelector('.sort-icon');
+                if (header.dataset.sortKey === sortKey) {
+                    header.classList.add(`sort-${sortOrder}`);
+                    icon.innerHTML = sortOrder === 'asc' ? '&#9650;' : '&#9660;';
+                } else {
+                    icon.innerHTML = '&#x2195;';
+                }
+            });
+
+            const filteredInventory = sortedInventory.filter(item => {
+                const status = getStockStatus(item).value;
+                const matchesSearch = item.name.toLowerCase().includes(searchTerm) || item.sku.toLowerCase().includes(searchTerm);
+                const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
+                const matchesStatus = statusFilter === 'all' || status === statusFilter;
+                return matchesSearch && matchesCategory && matchesStatus;
+            });
+
+            tableBody.innerHTML = '';
+
+            if (filteredInventory.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="7" class="text-center p-8 text-gray-500">Không tìm thấy sản phẩm nào.</td></tr>`;
+                return;
+            }
+
+            filteredInventory.forEach(item => {
+                const status = getStockStatus(item);
+                const isAdmin = state.currentUser && state.currentUser.role === 'admin';
+                const actionButtons = isAdmin ? `
+                    <button data-id="${item.id}" class="btn-edit-item text-indigo-600 hover:text-indigo-800 font-medium">Sửa</button>
+                    <button data-id="${item.id}" class="btn-delete-item text-red-600 hover:text-red-800 font-medium">Xóa</button>
+                ` : '<span class="text-gray-400 text-xs">Chỉ Admin</span>';
+                
+                const stockStatus = getStockStatus(item).value;
+                let stockClass = 'font-medium';
+                if (stockStatus === 'low-stock') {
+                    stockClass = 'text-yellow-500 font-bold text-lg';
+                } else if (stockStatus === 'out-of-stock') {
+                    stockClass = 'text-red-600 font-bold text-lg';
+                }
+
+                const row = `
+                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <td class="p-4"><div class="font-semibold">${item.name}</div></td>
+                        <td class="p-4 text-gray-600">${item.sku}</td>
+                        <td class="p-4 text-gray-600">${item.category}</td>
+                        <td class="p-4 text-right ${stockClass}">${item.stock} ${item.unit}</td>
+                        <td class="p-4 text-right text-gray-600">${formatCurrency(item.price)}</td>
+                        <td class="p-4"><span class="px-2 py-1 text-xs font-semibold rounded-full ${status.class}">${status.text}</span></td>
+                        <td class="p-4 text-center space-x-2">${actionButtons}</td>
+                    </tr>
+                `;
+                tableBody.insertAdjacentHTML('beforeend', row);
+            });
+        };
+        
+        const renderTransactions = () => {
+            const tableBody = document.getElementById('transactions-table-body');
+            if (!tableBody) return;
+
+            const filterSku = document.getElementById('transaction-filter-sku')?.value.toLowerCase() || '';
+            const filterStartDate = document.getElementById('transaction-filter-start-date')?.value;
+            const filterEndDate = document.getElementById('transaction-filter-end-date')?.value;
+
+            tableBody.innerHTML = '';
+
+            const filteredTransactions = state.transactions.filter(tx => {
+                const txSku = tx.itemSku || '';
+                const matchesSku = !filterSku || txSku.toLowerCase().includes(filterSku);
+                const txDate = new Date(tx.date);
+                const matchesStartDate = !filterStartDate || txDate >= new Date(filterStartDate);
+                const matchesEndDate = !filterEndDate || txDate <= new Date(filterEndDate);
+                return matchesSku && matchesStartDate && matchesEndDate;
+            });
+
+            if (filteredTransactions.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="17" class="text-center p-8 text-gray-500">Không tìm thấy giao dịch nào.</td></tr>`;
+                return;
+            }
+            
+            const sortedTransactions = [...filteredTransactions].sort((a,b) => (b.createdAt?.toDate() || new Date(b.date)) - (a.createdAt?.toDate() || new Date(a.date)));
+
+            sortedTransactions.forEach(tx => {
+                let typeText, typeClass, quantitySign;
+                switch(tx.type) {
+                    case 'export': typeText = 'Xuất kho'; typeClass = 'text-red-600'; quantitySign = '-'; break;
+                    case 'adjustment': typeText = 'Điều chỉnh'; typeClass = tx.quantity > 0 ? 'text-blue-600' : 'text-orange-600'; quantitySign = tx.quantity > 0 ? '+' : ''; break;
+                    case 'pr-receipt': typeText = 'Nhập từ PR'; typeClass = 'text-green-600'; quantitySign = '+'; break;
+                    default: typeText = tx.type; typeClass = 'text-gray-600'; quantitySign = '';
+                }
+
+                const itemName = tx.itemName || 'Sản phẩm đã xóa';
+                const itemSku = tx.itemSku || '';
+                const itemUnit = tx.unit || '';
+                const unitPrice = tx.unitPrice || 0;
+                const totalPrice = tx.totalPrice || (unitPrice * tx.quantity);
+
+                const displayedPerson = tx.type === 'export' ? (tx.requesterName || tx.userEmail) :
+                                        tx.type === 'adjustment' ? (tx.adjusterName || tx.userEmail) :
+                                        tx.type === 'pr-receipt' ? (tx.importerName || tx.userEmail) :
+                                        tx.userEmail;
+
+                const row = `
+                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                        <td class="p-4 text-gray-600">${new Date(tx.date).toLocaleDateString('vi-VN')}</td>
+                        <td class="p-4 font-medium ${typeClass}">${typeText}</td>
+                        <td class="p-4">${itemName} (${itemSku})</td>
+                        <td class="p-4 text-right font-medium ${typeClass}">${quantitySign}${tx.quantity}</td>
+                        <td class="p-4 text-gray-600">${itemUnit}</td>
+                        <td class="p-4 text-right text-gray-600">${formatCurrency(unitPrice)}</td>
+                        <td class="p-4 text-right font-medium">${formatCurrency(totalPrice)}</td>
+                        <td class="p-4 text-gray-600">${displayedPerson}</td>
+                        <td class="p-4 text-gray-600">${tx.supplier || ''}</td>
+                        <td class="p-4 text-gray-600">${tx.requesterName || ''}</td>
+                        <td class="p-4 text-gray-600">${tx.location || ''}</td>
+                        <td class="p-4 text-gray-600">${tx.line || ''}</td>
+                        <td class="p-4 text-gray-600">${tx.lineLeader || ''}</td>
+                        <td class="p-4 text-gray-600">${tx.supervisor || ''}</td>
+                        <td class="p-4 text-gray-600">${tx.receiverMsnv || ''}</td>
+                        <td class="p-4 text-gray-500">${tx.notes}</td>
+                    </tr>
+                `;
+                tableBody.insertAdjacentHTML('beforeend', row);
+            });
+        };
+        
+        const updateDashboardKPIs = (transactions) => {
+            if(state.currentView !== 'dashboard') return;
+            const kpiTotalValue = document.getElementById('kpi-total-value');
+            if (!kpiTotalValue) return;
+
+            const totalValue = state.inventory.reduce((sum, item) => sum + (item.stock * item.price), 0);
+            const totalValueUSD = totalValue / state.usdToVndRate;
+            const totalItems = state.inventory.length;
+            const lowStockItemsCount = state.inventory.filter(item => getStockStatus(item).value === 'low-stock').length;
+            const outOfStockItemsCount = state.inventory.filter(item => getStockStatus(item).value === 'out-of-stock').length;
+            const availableItemsCount = totalItems - outOfStockItemsCount;
+            
+            kpiTotalValue.textContent = formatCurrency(totalValue);
+            document.getElementById('kpi-total-value-usd').textContent = formatCurrency(totalValueUSD, 'USD');
+            document.getElementById('kpi-total-items').textContent = totalItems;
+            document.getElementById('kpi-low-stock').textContent = lowStockItemsCount;
+            document.getElementById('kpi-available-items').textContent = availableItemsCount;
+
+            const totalBudget = state.budgets.reduce((sum, budget) => sum + (budget.valueVND || 0), 0);
+            const totalSpent = state.purchaseRequisitions
+                .filter(pr => pr.status === 'approved' || pr.status === 'completed')
+                .reduce((sum, pr) => sum + pr.items.reduce((itemSum, item) => itemSum + (item.quantity * item.price), 0), 0);
+            const remainingBudget = totalBudget - totalSpent;
+
+            document.getElementById('kpi-budget-spent').textContent = formatCurrency(totalSpent);
+            document.getElementById('kpi-budget-total').textContent = formatCurrency(totalBudget);
+            document.getElementById('kpi-budget-remaining').textContent = formatCurrency(remainingBudget);
+            
+            document.getElementById('kpi-budget-spent-usd').textContent = formatCurrency(totalSpent / state.usdToVndRate, 'USD');
+            document.getElementById('kpi-budget-total-usd').textContent = formatCurrency(totalBudget / state.usdToVndRate, 'USD');
+            document.getElementById('kpi-budget-remaining-usd').textContent = formatCurrency(remainingBudget / state.usdToVndRate, 'USD');
+        };
+
+        const renderBudgetSpendingDetailChart = () => {
+            const canvas = document.getElementById('budgetSpendingDetailChart')?.getContext('2d');
+            if (!canvas) return;
+
+            if (state.charts.budgetSpendingDetailChart) state.charts.budgetSpendingDetailChart.destroy();
+            
+            const type = state.budgetChartType;
+            
+            const startDate = document.getElementById('budget-chart-filter-start-date')?.value;
+            const endDate = document.getElementById('budget-chart-filter-end-date')?.value;
+
+            const filteredPRs = state.purchaseRequisitions.filter(pr => {
+                if (!startDate && !endDate) return true;
+                const prDate = new Date(pr.prDate);
+                const matchesStart = !startDate || prDate >= new Date(startDate);
+                const matchesEnd = !endDate || prDate <= new Date(endDate);
+                return matchesStart && matchesEnd;
+            });
+
+            const spendingByBudget = {};
+            state.budgets.forEach(b => {
+                spendingByBudget[b.id] = {
+                    spent: 0,
+                    total: b.valueVND || 0,
+                    label: b.budgetNo || b.category
+                };
+            });
+
+            filteredPRs
+                .filter(pr => (pr.status === 'approved' || pr.status === 'completed') && pr.budgetId)
+                .forEach(pr => {
+                    if (spendingByBudget[pr.budgetId]) {
+                        const prTotal = pr.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+                        spendingByBudget[pr.budgetId].spent += prTotal;
+                    }
+                });
+
+            const labels = Object.values(spendingByBudget).map(b => b.label);
+            const spentData = Object.values(spendingByBudget).map(b => b.spent);
+            const totalData = Object.values(spendingByBudget).map(b => b.total);
+            const totalBudgetAll = state.budgets.reduce((sum, b) => sum + (b.valueVND || 0), 0);
+            
+            const datasets = [
+                {
+                    label: 'Ngân sách được duyệt',
+                    data: totalData,
+                    backgroundColor: '#c7d2fe', 
+                    borderColor: '#818cf8', 
+                    borderWidth: 2,
+                    type: type,
+                    tension: 0.1,
+                    fill: false,
+                    borderDash: type === 'line' ? [5, 5] : [],
+                },
+                {
+                    label: 'Đã chi tiêu',
+                    data: spentData,
+                    backgroundColor: '#fca5a5',
+                    borderColor: '#ef4444',
+                    borderWidth: 2,
+                    type: type,
+                    tension: 0.1,
+                    fill: false,
+                },
+                {
+                    label: 'Tổng ngân sách chung',
+                    data: Array(labels.length).fill(totalBudgetAll),
+                    borderColor: '#22c55e',
+                    type: 'line',
+                    fill: false,
+                    borderDash: [10, 5],
+                    pointRadius: 0,
+                    borderWidth: 2,
+                    datalabels: {
+                        display: true,
+                        align: 'end',
+                        anchor: 'end',
+                        color: '#15803d',
+                        font: { weight: 'bold' },
+                        formatter: (value, context) => {
+                            if (context.dataIndex === context.chart.data.labels.length - 1) {
+                                return 'Tổng: ' + formatCurrency(value);
+                            }
+                            return null;
+                        }
+                    }
+                }
+            ];
+            
+            state.charts.budgetSpendingDetailChart = new Chart(canvas, {
+                type: 'bar', 
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Ngân sách' } },
+                        y: {
+                            title: { display: true, text: 'Số tiền (VND)' },
+                            ticks: { callback: (value) => value > 1000000 ? (value / 1000000).toFixed(1) + 'tr' : formatCurrency(value, 'VND').replace(/\s*₫/, '') } 
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { callbacks: { label: (context) => `${context.dataset.label}: ${formatCurrency(context.raw)}` } },
+                        datalabels: {
+                            display: (context) => context.dataset.label !== 'Tổng ngân sách chung',
+                            align: 'end',
+                            anchor: 'end',
+                            font: { size: 12, weight: 'bold' },
+                            formatter: (value) => value > 1000000 ? (value / 1000000).toFixed(1) + 'tr' : (value > 0 ? formatCurrency(value, 'VND').replace(/\s*₫/, '') : '')
+                        }
+                    }
+                }
+            });
+
+            const barBtn = document.getElementById('btn-budget-chart-bar');
+            const lineBtn = document.getElementById('btn-budget-chart-line');
+            if(barBtn && lineBtn) {
+                barBtn.classList.toggle('bg-indigo-200', type === 'bar');
+                lineBtn.classList.toggle('bg-indigo-200', type === 'line');
+            }
+        };
+        
+        const renderBudgetSpendingProportionChart = (transactions) => {
+             const canvas = document.getElementById('budgetSpendingProportionChart')?.getContext('2d');
+            if (!canvas) return;
+
+            if (state.charts.budgetSpendingProportionChart) state.charts.budgetSpendingProportionChart.destroy();
+
+            const spendingByBudget = {};
+            state.purchaseRequisitions
+                .filter(pr => (pr.status === 'approved' || pr.status === 'completed') && pr.budgetId)
+                .forEach(pr => {
+                    const budget = state.budgets.find(b => b.id === pr.budgetId);
+                    if (budget) {
+                        const budgetLabel = budget.budgetNo || budget.category;
+                        const prTotal = pr.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+                        spendingByBudget[budgetLabel] = (spendingByBudget[budgetLabel] || 0) + prTotal;
+                    }
+                });
+
+            const colors = ['#6366f1', '#fbbf24', '#34d399', '#f87171', '#a78bfa', '#fb923c', '#ec4899'];
+
+            state.charts.budgetSpendingProportionChart = new Chart(canvas, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(spendingByBudget),
+                    datasets: [{
+                        label: 'Chi tiêu',
+                        data: Object.values(spendingByBudget),
+                        backgroundColor: colors,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right' },
+                        tooltip: { callbacks: { label: (context) => `${context.label}: ${formatCurrency(context.raw)}` } },
+                        datalabels: {
+                            display: true,
+                            color: '#fff',
+                            font: { weight: 'bold' },
+                            formatter: (value, ctx) => {
+                                let sum = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                let percentage = (value * 100 / sum).toFixed(1) + "%";
+                                return sum > 0 ? percentage : '';
+                            },
+                        }
+                    }
+                }
+            });
+        };
+
+        const renderRemainingBudgetChart = (transactions) => {
+            const totalBudgetPieCtx = document.getElementById('totalBudgetPieChart')?.getContext('2d');
+            
+            if(totalBudgetPieCtx) {
+                if(state.charts.totalBudgetPieChart) state.charts.totalBudgetPieChart.destroy();
+
+                const totalBudget = state.budgets.reduce((sum, budget) => sum + (budget.valueVND || 0), 0);
+                const totalSpent = state.purchaseRequisitions
+                    .filter(pr => pr.status === 'approved' || pr.status === 'completed')
+                    .reduce((sum, pr) => sum + pr.items.reduce((itemSum, item) => itemSum + (item.quantity * item.price), 0), 0);
+                const remainingBudget = Math.max(0, totalBudget - totalSpent);
+                
+                const data = totalSpent > 0 || remainingBudget > 0 ? [totalSpent, remainingBudget] : [0, 1];
+                const labels = totalSpent > 0 || remainingBudget > 0 ? ['Đã chi', 'Còn lại'] : ['Không có ngân sách'];
+                const colors = totalSpent > 0 || remainingBudget > 0 ? ['#ef4444', '#22c55e'] : ['#e5e7eb'];
+
+                state.charts.totalBudgetPieChart = new Chart(totalBudgetPieCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: colors,
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '70%',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: (context) => `${context.label}: ${formatCurrency(context.raw)} (${totalBudget > 0 ? ((context.raw / totalBudget) * 100).toFixed(2) : 0}%)` } },
+                            datalabels: { display: false }
+                        }
+                    }
+                });
+            }
+        };
+
+        const renderDailyTrendsChart = (transactions) => {
+            const trendCtx = document.getElementById('dailyTrendsChart')?.getContext('2d');
+            if (!trendCtx) return;
+
+            const metric = document.getElementById('daily-trends-metric-filter')?.value || 'quantity';
+
+            const dataByDate = {};
+            transactions.forEach(tx => {
+                const dateKey = tx.date;
+                if (!dataByDate[dateKey]) { dataByDate[dateKey] = { import: 0, export: 0 }; }
+                
+                const amount = metric === 'value' ? tx.totalPrice : tx.quantity;
+
+                if (tx.type === 'pr-receipt' || (tx.type === 'adjustment' && tx.quantity > 0)) {
+                    dataByDate[dateKey].import += Math.abs(amount);
+                } else if (tx.type === 'export' || (tx.type === 'adjustment' && tx.quantity < 0)) {
+                    dataByDate[dateKey].export += Math.abs(amount);
+                }
+            });
+
+            const sortedDates = Object.keys(dataByDate).sort((a, b) => new Date(a) - new Date(b));
+
+            if(state.charts.dailyTrendsChart) state.charts.dailyTrendsChart.destroy();
+            state.charts.dailyTrendsChart = new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: sortedDates,
+                    datasets: [
+                        { label: `Tổng Nhập`, data: sortedDates.map(d => dataByDate[d].import), borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.3 },
+                        { label: `Tổng Xuất`, data: sortedDates.map(d => dataByDate[d].export), borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', fill: true, tension: 0.3 }
+                    ]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'time', time: { unit: 'day', tooltipFormat: 'dd/MM/yyyy' } },
+                        y: { 
+                            ticks: { 
+                                precision: 0,
+                                callback: (value) => metric === 'value' ? formatCurrency(value, 'VND').replace(/\s*₫/, '') : value
+                            }, 
+                            title: { display: true, text: metric === 'value' ? 'Giá trị (VND)' : 'Số lượng' } 
+                        }
+                    },
+                    plugins: { 
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const label = context.dataset.label || '';
+                                    const value = context.raw;
+                                    return `${label}: ${metric === 'value' ? formatCurrency(value) : value}`;
+                                }
+                            }
+                        },
+                        datalabels: { display: false }
+                    }
+                }
+            });
+        };
+
+        const renderStationeryDistributionChart = (transactions) => {
+            const canvas = document.getElementById('stationeryDistributionChart')?.getContext('2d');
+            if (!canvas) return;
+
+            if (state.charts.stationeryDistributionChart) state.charts.stationeryDistributionChart.destroy();
+            
+            const groupBy = document.getElementById('stationery-group-by-filter')?.value || 'line';
+            const metric = document.getElementById('stationery-metric-filter')?.value || 'value';
+
+            const distributionData = {};
+            transactions
+                .filter(tx => tx.type === 'export' && tx[groupBy])
+                .forEach(tx => {
+                    const key = tx[groupBy];
+                    const amount = metric === 'value' ? tx.totalPrice : tx.quantity;
+                    distributionData[key] = (distributionData[key] || 0) + amount;
+                });
+            
+            const sortedData = Object.entries(distributionData).sort(([,a],[,b]) => b-a);
+
+            state.charts.stationeryDistributionChart = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: sortedData.map(item => item[0]),
+                    datasets: [{
+                        label: metric === 'value' ? 'Tổng giá trị' : 'Tổng số lượng',
+                        data: sortedData.map(item => item[1]),
+                        backgroundColor: '#f97316'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: (context) => metric === 'value' ? formatCurrency(context.raw) : context.raw } },
+                        datalabels: {
+                            display: true,
+                            anchor: 'end',
+                            align: 'end',
+                            color: '#7c2d12',
+                            font: { weight: 'bold' },
+                            formatter: (value) => metric === 'value' ? formatCurrency(value, 'VND').replace(/\s*₫/, '') : value
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            title: { display: true, text: metric === 'value' ? 'Giá trị (VND)' : 'Số lượng' },
+                            ticks: {
+                                callback: (value) => value > 1000000 ? (value / 1000000).toFixed(1) + 'tr' : (metric === 'value' ? formatCurrency(value, 'VND').replace(/\s*₫/, '') : value)
+                            }
+                        }
+                    }
+                }
+            });
+        };
+        
+        const renderTopConsumedItemsChart = (transactions) => {
+            const canvas = document.getElementById('topConsumedItemsChart')?.getContext('2d');
+            if (!canvas) return;
+
+            if (state.charts.topConsumedItemsChart) state.charts.topConsumedItemsChart.destroy();
+
+            const consumedData = {};
+            transactions
+                .filter(tx => tx.type === 'export')
+                .forEach(tx => {
+                    const itemName = tx.itemName || 'Không xác định';
+                    consumedData[itemName] = (consumedData[itemName] || 0) + tx.quantity;
+                });
+            
+            const sortedItems = Object.entries(consumedData)
+                .sort(([,a],[,b]) => b-a)
+                .slice(0, 10);
+
+            state.charts.topConsumedItemsChart = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: sortedItems.map(item => item[0]),
+                    datasets: [{
+                        label: 'Số lượng đã xuất',
+                        data: sortedItems.map(item => item[1]),
+                        backgroundColor: '#818cf8'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            display: true,
+                            anchor: 'end',
+                            align: 'end',
+                            color: '#4338ca'
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { precision: 0 }, title: { display: true, text: 'Số lượng' } }
+                    }
+                }
+            });
+        };
+
+        const renderTopLowStockChart = () => {
+            if (state.charts.topLowStockChart) state.charts.topLowStockChart.destroy();
+            const lowStockCanvas = document.getElementById('topLowStockChart');
+            if (lowStockCanvas) {
+                const lowStockCtx = lowStockCanvas.getContext('2d');
+                const lowStockItems = state.inventory
+                    .filter(item => item.stock > 0 && item.stock <= item.lowStockThreshold)
+                    .sort((a, b) => a.stock - b.stock)
+                    .slice(0, 10);
+                
+                state.charts.topLowStockChart = new Chart(lowStockCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: lowStockItems.map(i => i.name),
+                        datasets: [{ label: 'Số lượng trong kho', data: lowStockItems.map(i => i.stock), backgroundColor: '#fbbf24' }]
+                    },
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false, 
+                        indexAxis: 'y', 
+                        plugins: { 
+                            legend: { display: false },
+                            datalabels: {
+                                display: true,
+                                anchor: 'end',
+                                align: 'end',
+                                color: '#6b7280'
+                            }
+                        }, 
+                        scales: { 
+                            x: { ticks: { precision: 0 }, title: { display: true, text: 'Số lượng' } } 
+                        } 
+                    }
+                });
+            }
+        };
+
+        const renderRecentTransactions = (transactions) => {
+            const listContainer = document.getElementById('recent-transactions-list');
+            if (!listContainer) return;
+
+            listContainer.innerHTML = '';
+            const recentTxs = [...transactions]
+                .sort((a, b) => (b.createdAt?.toDate() || new Date(b.date)) - (a.createdAt?.toDate() || new Date(a.date)))
+                .slice(0, 5);
+
+            if (recentTxs.length === 0) {
+                listContainer.innerHTML = `<p class="text-center text-gray-500 p-4">Không có giao dịch nào trong giai đoạn này.</p>`;
+                return;
+            }
+
+            recentTxs.forEach(tx => {
+                let typeText, typeClass;
+                switch(tx.type) {
+                    case 'export': typeText = 'Xuất'; typeClass = 'text-red-500'; break;
+                    case 'pr-receipt': typeText = 'Nhập'; typeClass = 'text-green-500'; break;
+                    case 'adjustment': typeText = 'Điều chỉnh'; typeClass = 'text-blue-500'; break;
+                    default: typeText = tx.type; typeClass = 'text-gray-500';
+                }
+                const txHTML = `
+                    <div class="border-b pb-2">
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="font-semibold truncate pr-2">${tx.itemName}</span>
+                            <span class="font-bold ${typeClass}">${typeText}: ${tx.quantity}</span>
+                        </div>
+                        <div class="text-xs text-gray-400 flex justify-between">
+                            <span>${new Date(tx.date).toLocaleDateString('vi-VN')}</span>
+                            <span>${tx.userEmail.split('@')[0]}</span>
+                        </div>
+                    </div>
+                `;
+                listContainer.insertAdjacentHTML('beforeend', txHTML);
+            });
+        };
+        
+        const populateFilters = () => {
+            const categoryFilter = document.getElementById('inventory-filter-category');
+            if (categoryFilter) {
+                const categories = [...new Set(state.inventory.map(item => item.category))].sort();
+                const currentCategory = categoryFilter.value;
+                categoryFilter.innerHTML = '<option value="all">Tất cả Danh mục</option>';
+                categories.forEach(cat => {
+                    const selected = cat === currentCategory ? 'selected' : '';
+                    categoryFilter.insertAdjacentHTML('beforeend', `<option value="${cat}" ${selected}>${cat}</option>`);
+                });
+            }
+        };
+
+        // --- FORM & MODAL MANAGEMENT ---
+        
+        const openItemModal = (itemId = null) => {
+            const modal = document.getElementById('item-modal');
+            const form = document.getElementById('item-form');
+            const title = document.getElementById('item-modal-title');
+            form.reset();
+            document.getElementById('item-id').value = '';
+            
+            const stockInput = document.getElementById('item-stock');
+            const stockLabel = document.getElementById('item-stock-label');
+            
+            if (itemId) {
+                const item = state.inventory.find(i => i.id === itemId);
+                title.textContent = 'Chỉnh sửa Sản phẩm';
+                document.getElementById('item-id').value = item.id;
+                document.getElementById('item-name').value = item.name;
+                document.getElementById('item-sku').value = item.sku;
+                document.getElementById('item-category').value = item.category;
+                document.getElementById('item-price').value = item.price;
+                stockInput.value = item.stock;
+                document.getElementById('item-low-stock-threshold').value = item.lowStockThreshold;
+                document.getElementById('item-supplier').value = item.supplier || '';
+                document.getElementById('item-unit').value = item.unit || '';
+                
+                stockInput.disabled = true;
+                stockLabel.textContent = "Tồn kho (chỉ đọc, chỉnh sửa qua giao dịch)";
+
+            } else {
+                title.textContent = 'Thêm Sản phẩm Mới';
+                stockInput.disabled = false;
+                stockLabel.textContent = "Tồn kho ban đầu";
+            }
+            modal.classList.remove('hidden');
+        };
+
+        const closeItemModal = () => document.getElementById('item-modal').classList.add('hidden');
+        
+        const openTransactionModal = (type = 'export', prId = null) => {
+            state.currentTransactionItems = [];
+            const form = document.getElementById('transaction-form');
+            if (form) form.reset();
+            const modal = document.getElementById('transaction-modal');
+            if (modal) modal.classList.remove('hidden');
+            const dateInput = document.getElementById('transaction-date');
+            if (dateInput) dateInput.valueAsDate = new Date();
+            
+            const typeSelect = document.getElementById('transaction-type');
+            if (typeSelect) typeSelect.value = type;
+
+            const prSelect = document.getElementById('transaction-pr-select');
+            if (prSelect) prSelect.value = prId;
+            updateTransactionFormFields();
+        };
+
+        const closeTransactionModal = () => {
+            const form = document.getElementById('transaction-form');
+            if (form) form.reset();
+            const modal = document.getElementById('transaction-modal');
+            if (modal) modal.classList.add('hidden');
+            const suggestions = document.getElementById('transaction-item-suggestions');
+            if (suggestions) suggestions.classList.add('hidden');
+            state.currentTransactionItems = [];
+        };
+
+        const updateTransactionFormFields = () => {
+            const type = document.getElementById('transaction-type').value;
+            const isAdmin = state.currentUser && state.currentUser.role === 'admin';
+            
+            const prContainer = document.getElementById('pr-selection-container');
+            const importFields = document.getElementById('import-fields');
+            const exportFields = document.getElementById('export-fields');
+            const adjustmentFields = document.getElementById('adjustment-fields');
+
+            if (prContainer) prContainer.classList.add('hidden');
+            if (importFields) importFields.classList.add('hidden');
+            if (exportFields) exportFields.classList.add('hidden');
+            if (adjustmentFields) adjustmentFields.classList.add('hidden');
+            
+            const adjustmentOption = document.getElementById('adjustment-option');
+            if (adjustmentOption) adjustmentOption.classList.toggle('hidden', !isAdmin);
+            
+            const prReceiptOption = document.getElementById('pr-receipt-option');
+            if (prReceiptOption) prReceiptOption.classList.toggle('hidden', !state.currentUser);
+
+            if(type === 'pr-receipt') {
+                if (prContainer) prContainer.classList.remove('hidden');
+                if (importFields) importFields.classList.remove('hidden');
+                populatePRSelectorForImport();
+                const prSelect = document.getElementById('transaction-pr-select');
+                if (prSelect) handlePRSelectionForImport(prSelect.value);
+                const importerNameEl = document.getElementById('transaction-importer-name');
+                if(importerNameEl) importerNameEl.value = state.currentUser?.email?.split('@')[0] || '';
+            } else if (type === 'export') {
+                if (exportFields) exportFields.classList.remove('hidden');
+            } else if (type === 'adjustment') {
+                if (adjustmentFields) adjustmentFields.classList.remove('hidden');
+            }
+
+            const itemSearch = document.getElementById('transaction-item-search');
+            if (itemSearch) itemSearch.value = '';
+            state.currentTransactionItems = [];
+            renderTransactionItemsList();
+        };
+
+        const populatePRSelectorForImport = () => {
+            const selector = document.getElementById('transaction-pr-select');
+            if (!selector) return;
+            selector.innerHTML = '<option value="">-- Chưa chọn PR --</option>';
+            const approvedPRs = state.purchaseRequisitions.filter(pr => pr.status === 'approved');
+            approvedPRs.forEach(pr => {
+                const hasUnreceivedItems = pr.items.some(item => (item.receivedQty || 0) < item.quantity);
+                if (hasUnreceivedItems) {
+                    const option = document.createElement('option');
+                    option.value = pr.id;
+                    option.textContent = `${pr.prNo} (${pr.userEmail} - ${new Date(pr.prDate).toLocaleDateString()})`;
+                    selector.appendChild(option);
+                }
+            });
+        };
+        
+        const handlePRSelectionForImport = (prId) => {
+            state.currentTransactionItems = [];
+            if (!prId) {
+                renderTransactionItemsList();
+                return;
+            }
+            const selectedPR = state.purchaseRequisitions.find(pr => pr.id === prId);
+            if (selectedPR) {
+                selectedPR.items.forEach(prItem => {
+                    const inventoryItem = state.inventory.find(i => i.id === prItem.id);
+                    if (inventoryItem) {
+                        const remainingQty = prItem.quantity - (prItem.receivedQty || 0);
+                        if (remainingQty > 0) {
+                            state.currentTransactionItems.push({
+                                ...inventoryItem,
+                                quantity: remainingQty,
+                                originalPRQuantity: prItem.quantity,
+                                receivedPRQuantity: prItem.receivedQty || 0
+                            });
+                        }
+                    }
+                });
+            }
+            renderTransactionItemsList();
+        };
+        
+        const handleItemSearch = (e, suggestionsBoxId, callback) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const suggestionsBox = document.getElementById(suggestionsBoxId);
+            suggestionsBox.innerHTML = '';
+            if (searchTerm.length < 2) {
+                suggestionsBox.classList.add('hidden');
+                return;
+            }
+            const matchedItems = state.inventory.filter(item =>
+                item.name.toLowerCase().includes(searchTerm) ||
+                item.sku.toLowerCase().includes(searchTerm)
+            );
+            if (matchedItems.length > 0) {
+                matchedItems.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'p-2 hover:bg-gray-100 cursor-pointer';
+                    div.textContent = `${item.name} (${item.sku})`;
+                    div.addEventListener('click', () => {
+                        callback(item);
+                        suggestionsBox.classList.add('hidden');
+                    });
+                    suggestionsBox.appendChild(div);
+                });
+                suggestionsBox.classList.remove('hidden');
+            } else {
+                suggestionsBox.classList.add('hidden');
+            }
+        };
+
+        const renderTransactionItemsList = () => {
+            const container = document.getElementById('transaction-items-list-container');
+            const grandTotalContainer = document.getElementById('grand-total-container');
+            const grandTotalEl = document.getElementById('transaction-grand-total');
+            const transactionType = document.getElementById('transaction-type').value;
+            container.innerHTML = '';
+            let grandTotal = 0;
+
+            if (state.currentTransactionItems.length === 0) {
+                container.innerHTML = `<p class="text-center text-gray-500 p-4">Chưa có sản phẩm nào được thêm.</p>`;
+            } else {
+                state.currentTransactionItems.forEach((txItem, index) => {
+                    const itemTotal = txItem.price * txItem.quantity;
+                    grandTotal += itemTotal;
+
+                    const isAdjustment = transactionType === 'adjustment';
+                    const isPRReceipt = transactionType === 'pr-receipt';
+                    const isExport = transactionType === 'export';
+                    
+                    const quantityLabel = isAdjustment ? 'SL Điều chỉnh (+/-)' : 'Số lượng';
+                    
+                    let minAttribute = 'min="1"';
+                    if (isPRReceipt) {
+                        minAttribute = 'min="0"';
+                    } else if (isAdjustment) {
+                        minAttribute = ''; // No min attribute for adjustments, allowing negative values
+                    }
+
+                    let maxAttribute = '';
+                    if (isExport) {
+                         maxAttribute = `max="${txItem.stock}"`;
+                    } else if (isPRReceipt) {
+                        const maxQty = txItem.originalPRQuantity - txItem.receivedPRQuantity;
+                        maxAttribute = `max="${maxQty}"`;
+                    }
+
+                    const prInfo = isPRReceipt ? `<p class="text-xs text-gray-400">Yêu cầu: ${txItem.originalPRQuantity} | Đã nhận: ${txItem.receivedPRQuantity}</p>` : '';
+                    
+                    const stockStatus = getStockStatus(txItem);
+                    let stockClass = 'font-bold text-lg';
+                    if (stockStatus.value === 'low-stock') {
+                        stockClass += ' text-yellow-500';
+                    } else if (stockStatus.value === 'out-of-stock') {
+                        stockClass += ' text-red-600';
+                    }
+                    
+                    const itemHTML = `
+                        <div class="p-3 border-b border-gray-200 grid grid-cols-12 gap-3 items-center">
+                            <div class="col-span-5">
+                                <p class="font-semibold text-sm">${txItem.name}</p>
+                                <p class="text-xs text-gray-500">SKU: ${txItem.sku} | <span class="${stockClass}">Tồn kho: ${txItem.stock}</span></p>
+                                ${prInfo}
+                            </div>
+                            <div class="col-span-3">
+                                <label class="text-xs text-gray-500">${quantityLabel}</label>
+                                <input type="number" value="${txItem.quantity}" ${minAttribute} ${maxAttribute} data-index="${index}" class="tx-item-quantity w-full p-1 border rounded-md" placeholder="0">
+                            </div>
+                            <div class="col-span-3 text-right">
+                                <p class="font-semibold text-sm">${isAdjustment ? formatCurrency(Math.abs(itemTotal)) : formatCurrency(itemTotal)}</p>
+                            </div>
+                            <div class="col-span-1 text-right">
+                                <button type="button" data-index="${index}" class="btn-remove-tx-item text-red-500 hover:text-red-700">&times;</button>
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', itemHTML);
+                });
+            }
+            
+            if (transactionType === 'adjustment') {
+                grandTotalContainer.classList.add('hidden');
+            } else {
+                grandTotalContainer.classList.remove('hidden');
+            }
+            grandTotalEl.textContent = formatCurrency(grandTotal);
+        };
+
+        const addItemToTransaction = (item) => {
+            const type = document.getElementById('transaction-type').value;
+            const itemExists = state.currentTransactionItems.find(txItem => txItem.id === item.id);
+            if (itemExists) {
+                if (type === 'pr-receipt') {
+                    showToast('Sản phẩm đã có trong danh sách. Vui lòng chỉnh sửa số lượng.', 'error');
+                } else {
+                     itemExists.quantity += 1;
+                }
+            } else {
+                state.currentTransactionItems.push({ ...item, quantity: type === 'adjustment' ? 0 : 1 });
+            }
+            renderTransactionItemsList();
+        };
+
+        const updateTransactionItemQuantity = (index, quantity) => {
+            const transactionType = document.getElementById('transaction-type').value;
+            const itemInList = state.currentTransactionItems[index];
+            
+            if (!itemInList) return;
+
+            const numQuantity = parseFloat(quantity);
+            if (isNaN(numQuantity)) return;
+
+            if (transactionType === 'export') {
+                if (numQuantity <= 0 || numQuantity > itemInList.stock) {
+                    showToast(`Số lượng xuất cho "${itemInList.name}" phải lớn hơn 0 và không vượt quá tồn kho (${itemInList.stock})`, 'error');
+                    return;
+                }
+            } else if (transactionType === 'pr-receipt') {
+                const maxQuantity = itemInList.originalPRQuantity - itemInList.receivedPRQuantity;
+                if (numQuantity < 0 || numQuantity > maxQuantity) {
+                    showToast(`Số lượng nhận cho "${itemInList.name}" phải từ 0 đến số lượng PR còn lại (${maxQuantity})`, 'error');
+                    return;
+                }
+            } else if (transactionType === 'adjustment') {
+                 if (itemInList.stock + numQuantity < 0) {
+                       showToast(`Hành động này sẽ dẫn đến tồn kho âm cho "${itemInList.name}" (${itemInList.stock + numQuantity})!`, 'error');
+                       return;
+                 }
+            }
+            
+            itemInList.quantity = numQuantity;
+            renderTransactionItemsList();
+        };
+
+        const removeTransactionItem = (index) => {
+            state.currentTransactionItems.splice(index, 1);
+            renderTransactionItemsList();
+        };
+
+        const handleCSVFileSelect = (event, type) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (type === 'inventory') {
+                const previewContainer = document.getElementById('csv-preview-container');
+                const previewHeader = document.getElementById('csv-preview-header');
+                const previewBody = document.getElementById('csv-preview-body');
+                const resetButton = document.getElementById('btn-reset-and-import');
+                
+                previewHeader.innerHTML = '';
+                previewBody.innerHTML = '';
+                resetButton.disabled = true;
+                previewContainer.classList.add('hidden');
+
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        const requiredHeaders = ['Tên sản phẩm', 'Mã SKU', 'Danh mục', 'Đơn giá', 'Tồn kho', 'Ngưỡng tồn kho thấp', 'Nhà cung cấp', 'Đơn vị'];
+                        const fileHeaders = results.meta.fields;
+                        const hasAllHeaders = requiredHeaders.every(header => fileHeaders.includes(header));
+                        
+                        if (!hasAllHeaders) {
+                            showToast(`Tệp CSV thiếu các cột bắt buộc: ${requiredHeaders.filter(h => !fileHeaders.includes(h)).join(', ')}`, 'error');
+                            return;
+                        }
+
+                        if (results.data.length === 0) {
+                            showToast('Tệp CSV trống.', 'error');
+                            return;
+                        }
+                        
+                        // Map Vietnamese headers to English keys
+                        state.parsedCSVData = results.data.map(row => ({
+                            name: row['Tên sản phẩm'],
+                            sku: row['Mã SKU'],
+                            category: row['Danh mục'],
+                            price: row['Đơn giá'],
+                            stock: row['Tồn kho'],
+                            lowStockThreshold: row['Ngưỡng tồn kho thấp'],
+                            supplier: row['Nhà cung cấp'],
+                            unit: row['Đơn vị']
+                        }));
+
+                        previewContainer.classList.remove('hidden');
+                        resetButton.disabled = false;
+                        
+                        previewHeader.innerHTML = `<tr>${fileHeaders.map(h => `<th class="p-2 text-left">${h}</th>`).join('')}</tr>`;
+                        results.data.slice(0, 5).forEach(row => {
+                            previewBody.innerHTML += `<tr>${Object.values(row).map(v => `<td class="p-2 border-t">${v}</td>`).join('')}</tr>`;
+                        });
+                    }
+                });
+            } else if (type === 'pr-items') {
+                 Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    async complete(results) {
+                        if (results.errors.length > 0) {
+                            showToast('Lỗi khi đọc tệp CSV.', 'error');
+                            console.error("CSV Parsing Errors:", results.errors);
+                            return;
+                        }
+                        const requiredHeaders = ['Mã sản phẩm', 'Số lượng'];
+                        const hasAllHeaders = requiredHeaders.every(header => results.meta.fields.includes(header));
+                        if (!hasAllHeaders) {
+                            showToast(`Tệp CSV thiếu các cột bắt buộc: ${requiredHeaders.filter(h => !results.meta.fields.includes(h)).join(', ')}`, 'error');
+                            return;
+                        }
+
+                        for (const row of results.data) {
+                            const sku = row['Mã sản phẩm'];
+                            const quantity = parseInt(row['Số lượng']);
+
+                            if (!sku || isNaN(quantity) || quantity <= 0) {
+                                showToast(`Dòng không hợp lệ trong CSV: SKU trống hoặc số lượng không hợp lệ.`, 'error');
+                                continue; 
+                            }
+
+                            const inventoryItem = state.inventory.find(i => i.sku === sku);
+                            if (inventoryItem) {
+                                addItemToPR(inventoryItem, quantity);
+                            } else {
+                                showToast(`Không tìm thấy sản phẩm với SKU: ${sku}`, 'error');
+                            }
+                        }
+                        renderPRItemsList();
+                    }
+                 });
+            }
+        };
+
+        const handleResetAndImport = () => {
+            showConfirmationModal('Hành động này sẽ XÓA TẤT CẢ dữ liệu hiện tại (sản phẩm, giao dịch, ngân sách) và thay thế bằng tệp CSV. Dữ liệu đã xóa không thể khôi phục. Bạn có chắc chắn muốn tiếp tục không?', async () => {
+                const loadingIndicator = document.getElementById('loading-indicator');
+                if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+                
+                try {
+                    const inventoryRef = collection(db, 'products');
+                    const transactionsRef = collection(db, 'transactions');
+                    const budgetsRef = collection(db, 'budgets');
+                    const prsRef = collection(db, 'purchaseRequisitions');
+                    
+                    const oldInventoryDocs = await getDocs(inventoryRef);
+                    const oldTransactionsDocs = await getDocs(transactionsRef);
+                    const oldBudgetsDocs = await getDocs(budgetsRef);
+                    const oldPRsDocs = await getDocs(prsRef);
+                    
+                    const batch = writeBatch(db);
+                    oldInventoryDocs.forEach(doc => batch.delete(doc.ref));
+                    oldTransactionsDocs.forEach(doc => batch.delete(doc.ref));
+                    oldBudgetsDocs.forEach(doc => batch.delete(doc.ref));
+                    oldPRsDocs.forEach(doc => batch.delete(doc.ref));
+                    
+                    state.parsedCSVData.forEach(item => {
+                        const newItemRef = doc(inventoryRef);
+                        batch.set(newItemRef, {
+                            name: item.name,
+                            sku: item.sku,
+                            category: item.category,
+                            price: parseFloat(item.price),
+                            stock: parseInt(item.stock),
+                            lowStockThreshold: parseInt(item.lowStockThreshold),
+                            supplier: item.supplier,
+                            unit: item.unit,
+                        });
+                    });
+
+                    await batch.commit();
+                    showToast('Nhập dữ liệu thành công! Hệ thống đã được đặt lại.');
+                    const csvFileInput = document.getElementById('csv-file-input');
+                    if (csvFileInput) csvFileInput.value = null;
+                    const csvPreviewContainer = document.getElementById('csv-preview-container');
+                    if (csvPreviewContainer) csvPreviewContainer.classList.add('hidden');
+                    const resetButton = document.getElementById('btn-reset-and-import');
+                    if (resetButton) resetButton.disabled = true;
+
+                } catch (error) {
+                    console.error("Error resetting data and importing: ", error);
+                    showToast('Lỗi khi đặt lại hoặc nhập dữ liệu!', 'error');
+                } finally {
+                    if (loadingIndicator) loadingIndicator.classList.add('hidden');
+                }
+            });
+        };
+
+        const openBudgetModal = (budgetId = null) => {
+            const modal = document.getElementById('budget-modal');
+            const form = document.getElementById('budget-form');
+            const title = document.getElementById('budget-modal-title');
+            form.reset();
+            document.getElementById('budget-id').value = '';
+            
+            const valueUSDInput = document.getElementById('budget-value-usd');
+            const valueVNDInput = document.getElementById('budget-value-vnd');
+
+            if (budgetId) {
+                const budget = state.budgets.find(b => b.id === budgetId);
+                title.textContent = 'Chỉnh sửa Ngân sách';
+                document.getElementById('budget-id').value = budget.id;
+                document.getElementById('budget-period-from').value = budget.periodFrom;
+                document.getElementById('budget-period-to').value = budget.periodTo;
+                document.getElementById('budget-no').value = budget.budgetNo;
+                valueUSDInput.value = budget.valueUSD;
+                valueVNDInput.value = budget.valueVND;
+                document.getElementById('budget-category').value = budget.category;
+                document.getElementById('budget-remark').value = budget.remark;
+            } else {
+                title.textContent = 'Thêm Ngân sách Mới';
+            }
+
+            valueUSDInput.addEventListener('input', () => {
+                valueVNDInput.value = (parseFloat(valueUSDInput.value) * state.usdToVndRate) || 0;
+            });
+            
+            modal.classList.remove('hidden');
+        };
+
+        const closeBudgetModal = () => {
+            document.getElementById('budget-form').reset();
+            document.getElementById('budget-modal').classList.add('hidden');
+        };
+        
+        const handleDeleteBudget = (budgetId) => {
+            showConfirmationModal('Bạn có chắc chắn muốn xóa ngân sách này không?', async () => {
+                try {
+                    await deleteDoc(doc(db, "budgets", budgetId));
+                    showToast('Đã xóa ngân sách thành công!');
+                } catch (error) {
+                    console.error("Error deleting budget: ", error);
+                    showToast('Lỗi khi xóa ngân sách!', 'error');
+                }
+            });
+        };
+        
+        const handleBudgetFormSubmit = async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('budget-id').value;
+            const budgetData = {
+                periodFrom: document.getElementById('budget-period-from').value,
+                periodTo: document.getElementById('budget-period-to').value,
+                budgetNo: document.getElementById('budget-no').value,
+                valueUSD: parseFloat(document.getElementById('budget-value-usd').value),
+                valueVND: parseFloat(document.getElementById('budget-value-vnd').value),
+                category: document.getElementById('budget-category').value,
+                remark: document.getElementById('budget-remark').value,
+                userEmail: state.currentUser?.email,
+                spent: id ? (state.budgets.find(b => b.id === id)?.spent || 0) : 0,
+                createdAt: serverTimestamp()
+            };
+
+            try {
+                if (id) {
+                    await updateDoc(doc(db, "budgets", id), budgetData);
+                    showToast('Đã cập nhật ngân sách thành công!');
+                } else {
+                    await addDoc(collection(db, "budgets"), budgetData);
+                    showToast('Đã thêm ngân sách mới thành công!');
+                }
+                closeBudgetModal();
+            } catch (error) {
+                console.error("Error saving budget: ", error);
+                showToast('Đã xảy ra lỗi khi lưu ngân sách!', 'error');
+            }
+        };
+
+        const populatePRBudgetSelector = () => {
+            const selectEl = document.getElementById('pr-budget');
+            if (!selectEl) return;
+            selectEl.innerHTML = '<option value="">-- Chọn Ngân sách --</option>';
+            state.budgets.forEach(budget => {
+                const remaining = (budget.valueVND || 0) - (budget.spent || 0);
+                selectEl.insertAdjacentHTML('beforeend', `<option value="${budget.id}">${budget.budgetNo} - ${budget.category} (Còn lại: ${formatCurrency(remaining)})</option>`);
+            });
+        };
+        
+        const openPRModal = () => {
+            state.currentPRItems = [];
+            const form = document.getElementById('pr-form');
+            if (form) form.reset();
+            const modal = document.getElementById('pr-modal');
+            if (modal) modal.classList.remove('hidden');
+            const dateInput = document.getElementById('pr-date');
+            if(dateInput) dateInput.valueAsDate = new Date();
+            
+            populatePRSuggestions();
+            renderPRItemsList();
+            populatePRBudgetSelector();
+        };
+
+        const closePRModal = () => {
+            document.getElementById('pr-modal').classList.add('hidden');
+        };
+
+        const populatePRSuggestions = () => {
+            const listContainer = document.getElementById('low-stock-suggestions');
+            if(!listContainer) return;
+            listContainer.innerHTML = '';
+
+            const lowStockItems = state.inventory.filter(item => getStockStatus(item).value === 'low-stock');
+            if (lowStockItems.length === 0) {
+                listContainer.innerHTML = `<p class="p-4 text-gray-500">Hiện không có mặt hàng nào sắp hết hàng.</p>`;
+                return;
+            }
+
+            lowStockItems.forEach(item => {
+                const itemHTML = `
+                    <div class="flex items-center justify-between p-2 hover:bg-gray-200 rounded-md cursor-pointer add-to-pr-item" data-id="${item.id}">
+                        <p class="font-semibold text-sm">${item.name} (${item.sku})</p>
+                        <p class="text-xs text-red-500">Tồn kho: ${item.stock}</p>
+                    </div>
+                `;
+                listContainer.insertAdjacentHTML('beforeend', itemHTML);
+            });
+        };
+
+        const renderPRItemsList = () => {
+            const container = document.getElementById('pr-items-list-container');
+            const grandTotalEl = document.getElementById('pr-grand-total');
+            container.innerHTML = '';
+            let grandTotal = 0;
+
+            if (state.currentPRItems.length === 0) {
+                container.innerHTML = `<p class="text-center text-gray-500 p-4">Chưa có sản phẩm nào được thêm vào PR.</p>`;
+            } else {
+                state.currentPRItems.forEach((prItem, index) => {
+                    const itemTotal = prItem.price * prItem.quantity;
+                    grandTotal += itemTotal;
+                    
+                    const itemHTML = `
+                        <div class="p-3 border-b border-gray-200 grid grid-cols-12 gap-3 items-center">
+                            <div class="col-span-5">
+                                <p class="font-semibold text-sm">${prItem.name}</p>
+                                <p class="text-xs text-gray-500">SKU: ${prItem.sku} | Tồn kho: ${prItem.stock}</p>
+                            </div>
+                            <div class="col-span-3">
+                                <label class="text-xs text-gray-500">Số lượng</label>
+                                <input type="number" value="${prItem.quantity}" min="1" data-index="${index}" class="pr-item-quantity w-full p-1 border rounded-md" placeholder="0">
+                            </div>
+                            <div class="col-span-3 text-right">
+                                <p class="font-semibold text-sm">${formatCurrency(itemTotal)}</p>
+                            </div>
+                            <div class="col-span-1 text-right">
+                                <button type="button" data-index="${index}" class="btn-remove-pr-item text-red-500 hover:text-red-700">&times;</button>
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', itemHTML);
+                });
+            }
+            if (grandTotalEl) grandTotalEl.textContent = formatCurrency(grandTotal);
+        };
+        
+        const processAndCreatePR = async () => {
+            if (state.currentPRItems.length === 0) {
+                showToast('Vui lòng thêm sản phẩm vào PR.', 'error');
+                return;
+            }
+
+            const budgetId = document.getElementById('pr-budget').value;
+            if (!budgetId) {
+                showToast('Vui lòng chọn một Ngân sách.', 'error');
+                return;
+            }
+
+            const prNo = document.getElementById('pr-number').value;
+            if (!prNo) {
+                showToast('Vui lòng nhập số PR.', 'error');
+                return;
+            }
+
+            const selectedBudget = state.budgets.find(b => b.id === budgetId);
+            const remainingBudget = (selectedBudget.valueVND || 0) - (selectedBudget.spent || 0);
+            const prTotal = state.currentPRItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+            if (prTotal > remainingBudget) {
+                showToast(`Lỗi: Tổng giá trị PR (${formatCurrency(prTotal)}) vượt quá ngân sách còn lại (${formatCurrency(remainingBudget)}).`, 'error');
+                return;
+            }
+            
+            try {
+                const prData = {
+                    prNo: prNo,
+                    prDate: document.getElementById('pr-date').value,
+                    userEmail: state.currentUser?.email,
+                    budgetId: budgetId,
+                    items: state.currentPRItems.map(item => ({
+                        id: item.id,
+                        name: item.name,
+                        sku: item.sku,
+                        category: item.category,
+                        price: item.price,
+                        unit: item.unit,
+                        quantity: item.quantity,
+                        receivedQty: 0
+                    })),
+                    status: 'pending',
+                    createdAt: serverTimestamp()
+                };
+
+                await addDoc(collection(db, "purchaseRequisitions"), prData);
+                closePRModal();
+                showToast(`PR "${prNo}" đã được tạo thành công! Đang chờ phê duyệt.`, 'success');
+            } catch (error) {
+                console.error("Error creating PR: ", error);
+                showToast('Đã xảy ra lỗi khi tạo PR!', 'error');
+            }
+        };
+
+        // MODIFIED PR FORM SUBMIT HANDLER
+        const handlePRFormSubmit = (e) => {
+            e.preventDefault();
+            
+            // Gather PR data for confirmation modal
+            const prNo = document.getElementById('pr-number').value;
+            const budgetSelect = document.getElementById('pr-budget');
+            const selectedBudgetText = budgetSelect.options[budgetSelect.selectedIndex]?.text || 'Chưa chọn';
+            const prTotal = state.currentPRItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            const totalItems = state.currentPRItems.length;
+
+            // Validate before showing confirmation
+            if (totalItems === 0) {
+                showToast('Vui lòng thêm ít nhất một sản phẩm vào PR.', 'error');
+                return;
+            }
+             if (!prNo) {
+                showToast('Vui lòng nhập Số PR.', 'error');
+                return;
+            }
+            if (!budgetSelect.value) {
+                showToast('Vui lòng chọn một Ngân sách.', 'error');
+                return;
+            }
+
+            const prDetails = {
+                "Số PR": prNo,
+                "Ngân sách": selectedBudgetText.split('(Còn lại:')[0].trim(), // Clean up the text
+                "Số loại vật tư": totalItems,
+                "Tổng giá trị": formatCurrency(prTotal)
+            };
+            
+            showConfirmationModal(
+                'Vui lòng kiểm tra lại thông tin Yêu cầu Mua hàng (PR) dưới đây:', 
+                processAndCreatePR, 
+                prDetails
+            );
+        };
+        
+        const addItemToPR = (item, quantity = 1) => {
+            const itemExists = state.currentPRItems.find(prItem => prItem.id === item.id);
+            if (itemExists) {
+                itemExists.quantity += quantity;
+            } else {
+                state.currentPRItems.push({
+                    id: item.id,
+                    name: item.name,
+                    sku: item.sku,
+                    category: item.category,
+                    price: item.price,
+                    stock: item.stock,
+                    unit: item.unit,
+                    quantity: quantity
+                });
+            }
+            renderPRItemsList();
+        };
+
+        const updatePRItemQuantity = (index, quantity) => {
+            const numQuantity = parseInt(quantity);
+            if (isNaN(numQuantity) || numQuantity <= 0) {
+                 showToast('Số lượng phải lớn hơn 0.', 'error');
+                 return;
+            }
+            state.currentPRItems[index].quantity = numQuantity;
+            renderPRItemsList();
+        };
+
+        const removePRItem = (index) => {
+            state.currentPRItems.splice(index, 1);
+            renderPRItemsList();
+        };
+        
+        const handleApprovePR = async (prId) => {
+            showConfirmationModal('Bạn có chắc chắn muốn phê duyệt yêu cầu mua hàng này? Ngân sách sẽ bị trừ.', async () => {
+                try {
+                    const prRef = doc(db, 'purchaseRequisitions', prId);
+                    
+                    await runTransaction(db, async (transaction) => {
+                        const prDoc = await transaction.get(prRef);
+                        if (!prDoc.exists()) throw new Error('PR không tồn tại!');
+                        
+                        const prData = prDoc.data();
+                        if (prData.status !== 'pending') throw new Error('PR này không ở trạng thái chờ duyệt.');
+                        
+                        const budgetRef = doc(db, 'budgets', prData.budgetId);
+                        const budgetDoc = await transaction.get(budgetRef);
+                        if (!budgetDoc.exists()) throw new Error('Ngân sách không tồn tại!');
+                        
+                        const totalCost = prData.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+                        const newBudgetSpent = (budgetDoc.data().spent || 0) + totalCost;
+
+                        transaction.update(prRef, { status: 'approved' });
+                        transaction.update(budgetRef, { spent: newBudgetSpent });
+                    });
+
+                    showToast(`PR đã được phê duyệt thành công! Ngân sách đã được trừ. Bây giờ bạn có thể nhận hàng.`, 'success');
+                } catch (error) {
+                    console.error("Error approving PR: ", error);
+                    showToast(`Lỗi khi phê duyệt PR: ${error.message}`, 'error');
+                }
+            });
+        };
+
+        const handleCancelPR = async (prId) => {
+            showConfirmationModal('Bạn có chắc chắn muốn HỦY yêu cầu mua hàng này không?', async () => {
+                try {
+                    await updateDoc(doc(db, 'purchaseRequisitions', prId), { status: 'cancelled' });
+                    showToast('Đã hủy PR thành công!');
+                } catch (error) {
+                    console.error("Error cancelling PR: ", error);
+                    showToast('Lỗi khi hủy PR!', 'error');
+                }
+            });
+        };
+
+        const handleReceivePR = async (prId) => {
+            openTransactionModal('pr-receipt', prId);
+        };
+
+        // --- FIREBASE INTERACTIONS ---
+
+        const handleItemFormSubmit = async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('item-id').value;
+            const itemData = {
+                name: document.getElementById('item-name').value,
+                sku: document.getElementById('item-sku').value,
+                category: document.getElementById('item-category').value,
+                price: parseFloat(document.getElementById('item-price').value),
+                stock: parseInt(document.getElementById('item-stock').value),
+                lowStockThreshold: parseInt(document.getElementById('item-low-stock-threshold').value),
+                supplier: document.getElementById('item-supplier').value,
+                unit: document.getElementById('item-unit').value,
+            };
+
+            try {
+                if (id) {
+                    const { stock, ...metadata } = itemData;
+                    await updateDoc(doc(db, "products", id), metadata);
+                    showToast('Đã cập nhật sản phẩm thành công!');
+                } else {
+                    await addDoc(collection(db, "products"), itemData);
+                    showToast('Đã thêm sản phẩm mới thành công!');
+                }
+                closeItemModal();
+            } catch (error) {
+                console.error("Error saving item: ", error);
+                showToast('Đã xảy ra lỗi khi lưu!', 'error');
+            }
+        };
+        
+        const handleDeleteItem = (itemId) => {
+            showConfirmationModal('Bạn có chắc chắn muốn xóa sản phẩm này không? Hành động này không thể hoàn tác.', async () => {
+                try {
+                    await deleteDoc(doc(db, "products", itemId));
+                    showToast('Đã xóa sản phẩm thành công!');
+                    resetQuickActions();
+                } catch (error) {
+                    console.error("Error deleting item: ", error);
+                    showToast('Đã xảy ra lỗi khi xóa!', 'error');
+                }
+            });
+        };
+
+        const handleTransactionFormSubmit = async (e) => {
+            e.preventDefault();
+            const itemsForTransaction = state.currentTransactionItems.filter(item => item.quantity !== 0);
+            if (itemsForTransaction.length === 0) {
+                showToast('Vui lòng nhập số lượng cho ít nhất một sản phẩm.', 'error');
+                return;
+            }
+
+            const type = document.getElementById('transaction-type').value;
+            const location = document.getElementById('transaction-location').value;
+            
+            if (type !== 'adjustment' && !location) {
+                showToast(`Vui lòng chọn một vị trí!`, 'error');
+                return;
+            }
+            
+            const prId = document.getElementById('transaction-pr-select')?.value;
+
+            const commonData = {
+                date: document.getElementById('transaction-date').value,
+                type: type,
+                userEmail: state.currentUser?.email,
+                notes: document.getElementById('transaction-notes').value,
+                createdAt: serverTimestamp(),
+                location: location,
+                prId: prId || null,
+                requesterName: type === 'export' ? document.getElementById('transaction-requester-name').value : '',
+                receiverMsnv: type === 'export' ? document.getElementById('transaction-receiver-msnv').value : '',
+                line: type === 'export' ? document.getElementById('transaction-line').value : '',
+                lineLeader: type === 'export' ? document.getElementById('transaction-line-leader').value : '',
+                supervisor: type === 'export' ? document.getElementById('transaction-supervisor').value : '',
+                issuerName: type === 'export' ? document.getElementById('transaction-issuer-name').value : '',
+                adjusterName: type === 'adjustment' ? document.getElementById('transaction-adjuster-name').value : ''
+            };
+            
+            try {
+                await runTransaction(db, async (transaction) => {
+                    // --- READ PHASE ---
+                    const updatePayloads = [];
+                    let prData, prRef;
+
+                    if (type === 'pr-receipt' && prId) {
+                        prRef = doc(db, "purchaseRequisitions", prId);
+                        const prDoc = await transaction.get(prRef);
+                        if (!prDoc.exists()) throw new Error("PR không tồn tại!");
+                        prData = prDoc.data();
+                    }
+
+                    for (const txItem of itemsForTransaction) {
+                        const itemRef = doc(db, "products", txItem.id);
+                        const itemDoc = await transaction.get(itemRef);
+                        if (!itemDoc.exists()) throw new Error(`Sản phẩm "${txItem.name}" không tồn tại!`);
+                        
+                        const itemData = itemDoc.data();
+                        let quantityChange = 0;
+
+                        if (type === 'export') quantityChange = -txItem.quantity;
+                        else if (type === 'adjustment') quantityChange = txItem.quantity;
+                        else if (type === 'pr-receipt') quantityChange = txItem.quantity;
+
+                        const newStock = itemData.stock + quantityChange;
+                        if (newStock < 0) throw new Error(`Hành động này sẽ dẫn đến tồn kho âm cho "${txItem.name}" (${newStock})!`);
+                        
+                        updatePayloads.push({ itemRef, newStock, txItem });
+                    }
+
+                    // --- WRITE PHASE ---
+                    for (const payload of updatePayloads) {
+                        transaction.update(payload.itemRef, { stock: payload.newStock });
+
+                        const newTransactionData = { 
+                            ...commonData, 
+                            itemId: payload.txItem.id, 
+                            itemName: payload.txItem.name,
+                            itemSku: payload.txItem.sku,
+                            quantity: payload.txItem.quantity,
+                            unit: payload.txItem.unit,
+                            unitPrice: payload.txItem.price,
+                            totalPrice: payload.txItem.price * payload.txItem.quantity,
+                            supplier: type === 'pr-receipt' ? payload.txItem.supplier : '',
+                            importerName: type === 'pr-receipt' ? document.getElementById('transaction-importer-name').value : '',
+                        };
+                        const transRef = doc(collection(db, "transactions"));
+                        transaction.set(transRef, newTransactionData);
+                    }
+                    
+                    if (type === 'pr-receipt' && prId && prData) {
+                        const updatedItems = prData.items.map(prItem => {
+                            const receivedItem = itemsForTransaction.find(txItem => txItem.id === prItem.id);
+                            if (receivedItem) {
+                                return {
+                                    ...prItem,
+                                    receivedQty: (prItem.receivedQty || 0) + receivedItem.quantity
+                                };
+                            }
+                            return prItem;
+                        });
+                        
+                        const allItemsReceived = updatedItems.every(item => item.receivedQty >= item.quantity);
+                        transaction.update(prRef, { 
+                            items: updatedItems,
+                            status: allItemsReceived ? 'completed' : prData.status
+                        });
+                    }
+                });
+                closeTransactionModal();
+                showToast('Tạo giao dịch thành công!');
+            } catch (error) {
+                console.error("Transaction failed: ", error);
+                showToast(error.message || 'Giao dịch thất bại!', 'error');
+            }
+        };
+
+        const exportToCSV = (headers, dataRows, filename) => {
+            let csvContent = "\ufeff" + headers.join(",") + "\n" + dataRows.map(row => row.join(",")).join("\n");
+            const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        const exportInventoryToCSV = () => {
+            const headers = ['Tên sản phẩm', 'Mã SKU', 'Danh mục', 'Tồn kho', 'Đơn vị', 'Đơn giá', 'Trạng thái'];
+            const rows = state.inventory.map(item => {
+                const status = getStockStatus(item);
+                const row = [ item.name, item.sku, item.category, item.stock, item.unit, item.price, status.text ];
+                return row.map(val => `"${String(val || '').replace(/"/g, '""')}"`);
+            });
+            exportToCSV(headers, rows, 'Ton_kho.csv');
+        };
+
+        const exportTransactionsToCSV = () => {
+            const headers = ['Ngày', 'Loại giao dịch', 'SKU', 'Tên sản phẩm', 'Số lượng', 'Đơn vị', 'Đơn giá', 'Thành tiền', 'Email người dùng', 'Ghi chú', 'Người nhập', 'Nhà cung cấp', 'Người yêu cầu', 'Vị trí', 'Chuyền', 'Line Leader', 'Supervisor', 'Mã nhân viên', 'Người xuất'];
+            
+            const filterSku = document.getElementById('transaction-filter-sku')?.value.toLowerCase() || '';
+            const filterStartDate = document.getElementById('transaction-filter-start-date')?.value;
+            const filterEndDate = document.getElementById('transaction-filter-end-date')?.value;
+            
+            const filteredTransactions = state.transactions.filter(tx => {
+                const txSku = tx.itemSku || '';
+                const matchesSku = !filterSku || txSku.toLowerCase().includes(filterSku);
+                const txDate = new Date(tx.date);
+                const matchesStartDate = !filterStartDate || txDate >= new Date(filterStartDate);
+                const matchesEndDate = !filterEndDate || txDate <= new Date(filterEndDate);
+                return matchesSku && matchesStartDate && matchesEndDate;
+            }).sort((a,b) => (b.createdAt?.toDate() || new Date(b.date)) - (a.createdAt?.toDate() || new Date(a.date)));
+
+            const rows = filteredTransactions.map(tx => {
+                const row = [ 
+                    tx.date, 
+                    tx.type, 
+                    tx.itemSku || '', 
+                    tx.itemName || 'Sản phẩm đã xóa', 
+                    tx.quantity, 
+                    tx.unit || '', 
+                    tx.unitPrice || 0, 
+                    tx.totalPrice || 0, 
+                    tx.userEmail || '', 
+                    tx.notes || '', 
+                    tx.importerName || '', 
+                    tx.supplier || '', 
+                    tx.requesterName || '', 
+                    tx.location || '', 
+                    tx.line || '', 
+                    tx.lineLeader || '',
+                    tx.supervisor || '',
+                    tx.receiverMsnv || '', 
+                    tx.issuerName || '' 
+                ];
+                return row.map(val => `"${String(val || '').replace(/"/g, '""')}"`);
+            });
+            exportToCSV(headers, rows, 'Lich_su_giao_dich.csv');
+        };
+        
+        const resetQuickActions = () => {
+            const searchInput = document.getElementById('quick-action-item-search');
+            if(searchInput) searchInput.value = '';
+            const details = document.getElementById('quick-action-selected-item-details');
+            if(details) details.innerHTML = '';
+            const selectedId = document.getElementById('quick-action-selected-item-id');
+            if(selectedId) selectedId.value = '';
+            document.getElementById('btn-quick-edit')?.classList.add('hidden');
+            document.getElementById('btn-quick-delete')?.classList.add('hidden');
+        };
+
+        const updateUIAfterAuthChange = () => {
+            const authContainer = document.getElementById('auth-container');
+            const user = state.currentUser;
+            const isAdmin = user && user.role === 'admin';
+            
+            if (user) {
+                authContainer.innerHTML = `
+                    <div class="flex items-center gap-4">
+                        <div class="text-right">
+                            <p class="font-semibold text-sm">${user.email}</p>
+                            <p class="text-xs text-gray-500 capitalize">${user.role}</p>
+                        </div>
+                        <button id="btn-logout" class="btn btn-danger !py-1.5 !px-3 !text-sm">Đăng xuất</button>
+                    </div>`;
+                const logoutBtn = document.getElementById('btn-logout');
+                if (logoutBtn) logoutBtn.addEventListener('click', () => signOut(auth));
+            } else {
+                authContainer.innerHTML = `<button id="btn-login" class="btn btn-primary">Đăng nhập</button>`;
+                const loginBtn = document.getElementById('btn-login');
+                if (loginBtn) loginBtn.addEventListener('click', () => document.getElementById('login-modal')?.classList.remove('hidden'));
+            }
+
+            const newTransactionButtons = document.getElementById('new-transaction-buttons');
+            if (newTransactionButtons) {
+                 newTransactionButtons.classList.toggle('hidden', !user);
+                 const adjustButton = document.getElementById('btn-new-transaction-adjust');
+                 if(adjustButton) adjustButton.classList.toggle('hidden', !isAdmin);
+            }
+
+
+            const adminPanel = document.getElementById('admin-actions-panel');
+            if(adminPanel) adminPanel.classList.toggle('hidden', !isAdmin);
+
+            document.getElementById('inventory-check-link')?.classList.toggle('hidden', !isAdmin);
+            document.getElementById('budget-control-link')?.classList.toggle('hidden', !user);
+            document.getElementById('admin-budget-actions')?.classList.toggle('hidden', !isAdmin);
+            document.getElementById('pr-creation-buttons')?.classList.toggle('hidden', !user);
+
+            if(state.currentView === 'budget-control') {
+                renderBudgets();
+                renderPRs();
+            }
+        };
+
+        const initApp = () => {
+            const initialView = window.location.hash.replace('#', '') || 'dashboard';
+            navigateTo(initialView);
+
+            document.body.addEventListener('click', (e) => {
+                const target = e.target;
+                const link = target.closest('.sidebar-link');
+                if (link) {
+                    e.preventDefault();
+                    navigateTo(link.dataset.view);
+                }
+                if (target.id === 'btn-login') document.getElementById('login-modal')?.classList.remove('hidden');
+                if (target.id === 'btn-logout') signOut(auth);
+                if (target.id === 'btn-cancel-login') document.getElementById('login-modal')?.classList.add('hidden');
+                if (target.id === 'btn-cancel-item') closeItemModal();
+                if (target.id === 'btn-cancel-transaction') closeTransactionModal();
+                if (target.id === 'btn-cancel-budget') closeBudgetModal();
+                if (target.id === 'btn-cancel-pr') closePRModal();
+                if (target.id === 'btn-add-item-from-form') openItemModal();
+                if (target.id === 'btn-new-transaction-export') openTransactionModal('export');
+                if (target.id === 'btn-new-transaction-import') openTransactionModal('pr-receipt');
+                if (target.id === 'btn-new-transaction-adjust') openTransactionModal('adjustment');
+                if (target.classList.contains('btn-edit-item')) openItemModal(target.dataset.id);
+                if (target.classList.contains('btn-delete-item')) handleDeleteItem(target.dataset.id);
+                if (target.id === 'btn-quick-edit') openItemModal(document.getElementById('quick-action-selected-item-id').value);
+                if (target.id === 'btn-quick-delete') handleDeleteItem(document.getElementById('quick-action-selected-item-id').value);
+                if (target.id === 'btn-apply-transaction-filter') renderTransactions();
+                if (target.id === 'btn-export-transactions-csv') exportTransactionsToCSV();
+                if (target.id === 'btn-export-inventory-csv') exportInventoryToCSV();
+                if (target.id === 'btn-reset-and-import') handleResetAndImport();
+                if (target.id === 'btn-download-inventory-template') downloadCSVTemplate(['Tên sản phẩm', 'Mã SKU', 'Danh mục', 'Đơn giá', 'Tồn kho', 'Ngưỡng tồn kho thấp', 'Nhà cung cấp', 'Đơn vị'], 'mau_nhap_ton_kho.csv');
+                if (target.id === 'btn-download-pr-items-template') downloadCSVTemplate(['Mã sản phẩm', 'Tên sản phẩm', 'Số lượng'], 'mau_nhap_pr.csv');
+                if (target.id === 'btn-add-budget') openBudgetModal();
+                if (target.classList.contains('btn-edit-budget')) openBudgetModal(target.dataset.id);
+                if (target.classList.contains('btn-delete-budget')) handleDeleteBudget(target.dataset.id);
+                if (target.id === 'btn-create-pr') openPRModal();
+                if (target.id === 'btn-budget-chart-bar') { state.budgetChartType = 'bar'; renderBudgetSpendingDetailChart(); }
+                if (target.id === 'btn-budget-chart-line') { state.budgetChartType = 'line'; renderBudgetSpendingDetailChart(); }
+                if (target.id === 'btn-apply-budget-chart-filter') { renderBudgetSpendingDetailChart(); }
+                if (target.id === 'btn-apply-global-filter' || target.id === 'btn-reset-global-filter') {
+                    if (target.id === 'btn-reset-global-filter') {
+                        document.getElementById('global-filter-start-date').value = '';
+                        document.getElementById('global-filter-end-date').value = '';
+                    }
+                    renderDashboard();
+                }
+                const addToPrItem = target.closest('.add-to-pr-item');
+                if (addToPrItem) {
+                    const item = state.inventory.find(item => item.id === addToPrItem.dataset.id);
+                    if(item) addItemToPR(item);
+                }
+                if (target.classList.contains('btn-approve-pr')) handleApprovePR(target.dataset.id);
+                if (target.classList.contains('btn-cancel-pr-admin')) handleCancelPR(target.dataset.id);
+                if (target.classList.contains('btn-receive-pr')) handleReceivePR(target.dataset.id);
+                if (target.classList.contains('btn-remove-tx-item')) removeTransactionItem(target.dataset.index);
+                if (target.classList.contains('btn-remove-pr-item')) removePRItem(target.dataset.index);
+
+                const sortHeader = target.closest('.sortable-header');
+                if(sortHeader) {
+                    const key = sortHeader.dataset.sortKey;
+                    if (state.inventorySort.key === key) {
+                        state.inventorySort.order = state.inventorySort.order === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        state.inventorySort.key = key;
+                        state.inventorySort.order = 'asc';
+                    }
+                    renderInventory();
+                }
+            });
+
+            document.body.addEventListener('submit', (e) => {
+                if (e.target.id === 'login-form') {
+                    e.preventDefault();
+                    const email = document.getElementById('login-email').value;
+                    const password = document.getElementById('login-password').value;
+                    signInWithEmailAndPassword(auth, email, password)
+                        .then(() => document.getElementById('login-modal')?.classList.add('hidden'))
+                        .catch(() => showToast('Email hoặc mật khẩu không đúng!', 'error'));
+                }
+                if (e.target.id === 'item-form') handleItemFormSubmit(e);
+                if (e.target.id === 'transaction-form') handleTransactionFormSubmit(e);
+                if (e.target.id === 'budget-form') handleBudgetFormSubmit(e);
+                if (e.target.id === 'pr-form') handlePRFormSubmit(e);
+            });
+
+            document.body.addEventListener('input', (e) => {
+                const target = e.target;
+                if (target.matches('#inventory-search, #inventory-filter-category, #inventory-filter-status')) {
+                    renderInventory();
+                }
+                if (target.id === 'quick-action-item-search') {
+                    handleItemSearch(e, 'quick-action-item-suggestions', (item) => {
+                        document.getElementById('quick-action-item-search').value = `${item.name} (${item.sku})`;
+                        document.getElementById('quick-action-selected-item-id').value = item.id;
+                        document.getElementById('quick-action-selected-item-details').innerHTML = `<b>Tồn kho:</b> ${item.stock} ${item.unit}`;
+                        document.getElementById('btn-quick-edit').classList.remove('hidden');
+                        document.getElementById('btn-quick-delete').classList.remove('hidden');
+                    });
+                }
+                if (target.matches('#stationery-group-by-filter, #stationery-metric-filter, #daily-trends-metric-filter')) {
+                    renderDashboard();
+                }
+                if (target.id === 'budget-value-usd') {
+                    const valueUSD = parseFloat(target.value) || 0;
+                    document.getElementById('budget-value-vnd').value = valueUSD * state.usdToVndRate;
+                }
+                 if (target.id === 'transaction-item-search') {
+                    handleItemSearch(e, 'transaction-item-suggestions', (item) => {
+                        addItemToTransaction(item);
+                        target.value = '';
+                    });
+                }
+                if (target.id === 'pr-item-search') {
+                    handleItemSearch(e, 'pr-item-suggestions', (item) => {
+                        addItemToPR(item);
+                        target.value = '';
+                    });
+                }
+            });
+             document.body.addEventListener('change', (e) => {
+                const target = e.target;
+                if (target.id === 'transaction-type') updateTransactionFormFields();
+                if (target.id === 'transaction-pr-select') handlePRSelectionForImport(target.value);
+                if (target.id === 'csv-file-input') handleCSVFileSelect(e, 'inventory');
+                if (target.id === 'pr-items-csv-input') handleCSVFileSelect(e, 'pr-items');
+
+                if (target.classList.contains('tx-item-quantity')) {
+                    const index = target.dataset.index;
+                    updateTransactionItemQuantity(index, target.value);
+                }
+                if (target.classList.contains('pr-item-quantity')) {
+                    const index = target.dataset.index;
+                    updatePRItemQuantity(index, target.value);
+                }
+            });
+        };
+
+        const detachFirestoreListeners = () => {
+            if (state.unsubInventory) state.unsubInventory();
+            if (state.unsubTransactions) state.unsubTransactions();
+            if (state.unsubBudgets) state.unsubBudgets();
+            if (state.unsubPRs) state.unsubPRs();
+            state.inventory = [];
+            state.transactions = [];
+            state.budgets = [];
+            state.purchaseRequisitions = [];
+        };
+
+        const attachFirestoreListeners = () => {
+            detachFirestoreListeners();
+
+            const handleFirestoreError = (error, collectionName) => {
+                console.error(`Lỗi khi lắng nghe bộ sưu tập ${collectionName}: `, error);
+                if (error.code === 'permission-denied') {
+                    if(collectionName === 'inventory' || collectionName === 'transactions') {
+                        showToast(`Lỗi: Không đủ quyền truy cập dữ liệu ${collectionName}. Vui lòng đăng nhập hoặc kiểm tra lại quyền.`, 'error');
+                    }
+                }
+            };
+
+            state.unsubInventory = onSnapshot(collection(db, "products"), (snapshot) => {
+                state.inventory = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                refreshUI();
+            }, (error) => handleFirestoreError(error, "products"));
+
+            state.unsubTransactions = onSnapshot(query(collection(db, "transactions")), (snapshot) => {
+                state.transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                refreshUI();
+            }, (error) => handleFirestoreError(error, "transactions"));
+
+            state.unsubBudgets = onSnapshot(query(collection(db, "budgets")), (snapshot) => {
+                state.budgets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (state.currentView === 'budget-control' || state.currentView === 'dashboard') refreshUI();
+            }, (error) => {
+                handleFirestoreError(error, "budgets");
+                state.budgets = []; 
+                if (state.currentView === 'budget-control' || state.currentView === 'dashboard') refreshUI();
+            });
+
+            state.unsubPRs = onSnapshot(query(collection(db, "purchaseRequisitions")), (snapshot) => {
+                state.purchaseRequisitions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (state.currentView === 'budget-control' || state.currentView === 'dashboard') refreshUI();
+            }, (error) => {
+                handleFirestoreError(error, "purchase requisitions");
+                state.purchaseRequisitions = [];
+                if (state.currentView === 'budget-control' || state.currentView === 'dashboard') refreshUI();
+            });
+        };
+        
+        onAuthStateChanged(auth, async (user) => {
+            detachFirestoreListeners();
+
+            if (user) {
+                const userRef = doc(db, "users", user.uid);
+                const userDoc = await getDoc(userRef);
+
+                if (userDoc.exists()) {
+                    state.currentUser = { uid: user.uid, email: user.email, ...userDoc.data() };
+                } else {
+                    const newUserProfile = {
+                        email: user.email,
+                        role: 'user', // Default role
+                        joinedAt: serverTimestamp()
+                    };
+                    await setDoc(userRef, newUserProfile);
+                    state.currentUser = { uid: user.uid, ...newUserProfile };
+                }
+                attachFirestoreListeners();
+            } else {
+                state.currentUser = null;
+                refreshUI();
+            }
+        });
+        
+        initApp();
+    </script>
+</body>
+</html>
